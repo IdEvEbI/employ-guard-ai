@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pymupdf
 
 from employ_guard.paths import output_run_dir, resolve_input_file
+
+_INTERNAL_SPACE = re.compile(r"[ \t]+")
 
 
 class ReadResumeError(Exception):
@@ -23,20 +26,32 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def normalize_extracted_text(text: str) -> str:
+    """去掉版面空格，连续空行最多保留一个。不猜测字段名，不拼接视觉折行。"""
+    lines: list[str] = []
+    previous_blank = False
+    for raw in text.splitlines():
+        line = _INTERNAL_SPACE.sub(" ", raw).strip()
+        if not line:
+            if lines and not previous_blank:
+                lines.append("")
+            previous_blank = True
+            continue
+        lines.append(line)
+        previous_blank = False
+    return "\n".join(lines).strip()
+
+
 def _markdown(pages: list[dict[str, object]]) -> str:
+    body = "\n\n".join(str(item["text"]) for item in pages if str(item["text"]).strip())
     parts = [
         "# 简历文本",
         "",
-        "> 本文件由 `read-resume` 从 PDF 抽出，供后续工具阅读。本步不判断能不能投，也不评价排版。分栏或页眉页脚可能导致文字顺序与版面不一致，查排版请看页图。",
+        "> 本文件由 `read-resume` 从 PDF 抽出，供后续工具阅读。本步不判断能不能投，也不评价排版。页码只写在同目录的 JSON 中。分栏或页眉页脚可能导致文字顺序与版面不一致，查排版请看页图。",
+        "",
+        body,
         "",
     ]
-    for item in pages:
-        number = item["page"]
-        text = str(item["text"]).strip()
-        parts.append(f"## 第 {number} 页")
-        parts.append("")
-        parts.append(text if text else "（本页未抽出文字）")
-        parts.append("")
     return "\n".join(parts).rstrip() + "\n"
 
 
@@ -68,8 +83,8 @@ def extract_resume_text(
             raise ReadResumeError("这份 PDF 没有页面，无法抽文本。")
         for index in range(document.page_count):
             page = document.load_page(index)
-            text = page.get_text("text", sort=True) or ""
-            pages.append({"page": index + 1, "text": text, "char_count": len(text.strip())})
+            text = normalize_extracted_text(page.get_text("text", sort=True) or "")
+            pages.append({"page": index + 1, "text": text, "char_count": len(text)})
     except ReadResumeError:
         raise
     except Exception as exc:  # noqa: BLE001
