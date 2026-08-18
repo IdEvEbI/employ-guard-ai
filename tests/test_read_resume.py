@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pymupdf
@@ -9,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from employ_guard.cli import app
-from employ_guard.read_resume import ReadResumeError, extract_resume_text
+from employ_guard.read_resume import ReadResumeError, extract_resume_text, normalize_extracted_text
 
 runner = CliRunner()
 
@@ -51,9 +52,48 @@ def test_extracts_text_by_page(tmp_path: Path) -> None:
     assert "PAGE-A" in md
     assert "PAGE-B" in md
     assert "不判断能不能投" in md
+    assert "## 第" not in md
     payload = (run_dir / "sample.resume.json").read_text(encoding="utf-8")
     assert '"judges_content": false' in payload
     assert '"evaluates_layout": false' in payload
+    assert '"page": 1' in payload
+    assert '"page": 2' in payload
+
+
+def test_normalize_extracted_text_collapses_layout_spaces() -> None:
+    raw = "                       RIGHT-TITLE\n\n\nBODY  LINE\n"
+    assert normalize_extracted_text(raw) == "RIGHT-TITLE\n\nBODY LINE"
+
+
+def test_strips_layout_spaces_and_keeps_pages_in_json(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "resumes" / "indented.pdf"
+    document = pymupdf.open()
+    page = document.new_page(width=595, height=842)
+    page.insert_text((300, 72), "RIGHT-TITLE", fontsize=18)
+    page.insert_text((72, 120), "BODY LINE", fontsize=12)
+    page2 = document.new_page(width=595, height=842)
+    page2.insert_text((72, 72), "PAGE-TWO", fontsize=18)
+    pdf.parent.mkdir(parents=True, exist_ok=True)
+    document.save(pdf)
+    document.close()
+
+    run_dir = extract_resume_text(pdf, root=tmp_path)
+    md = (run_dir / "indented.resume.md").read_text(encoding="utf-8")
+    assert "RIGHT-TITLE" in md
+    assert "BODY LINE" in md
+    assert "PAGE-TWO" in md
+    assert "## 第" not in md
+    for line in md.splitlines():
+        if line.startswith(">") or line.startswith("#"):
+            continue
+        assert line == line.lstrip(), line
+
+    payload = json.loads((run_dir / "indented.resume.json").read_text(encoding="utf-8"))
+    assert payload["pages"][0]["page"] == 1
+    assert payload["pages"][0]["text"] == "RIGHT-TITLE\n\nBODY LINE"
+    assert payload["pages"][1]["text"] == "PAGE-TWO"
+    assert "姓名：" not in md
+    assert "婚姻状况：" not in md
 
 
 def test_cli_writes_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
