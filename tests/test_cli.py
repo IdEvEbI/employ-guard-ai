@@ -12,6 +12,7 @@ def test_help_exits_zero() -> None:
     assert result.exit_code == 0
     assert "就业守护" in result.stdout
     assert "pdf-to-images" in result.stdout
+    assert "read-resume" in result.stdout
 
 
 def test_version() -> None:

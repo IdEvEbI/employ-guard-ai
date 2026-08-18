@@ -15,7 +15,7 @@
 2. **听后做复盘**：转写现场录音 → 还原问答 → 面试评价（命令 `interview`）。
 3. **后续愿景**：知识库、模拟面试、真面试入库、企业查询（都是新工具，不作为本期必须交付）。
 
-当前里程碑是 **投前看简历**：先做不依赖评价标准的出图与抽文本。产品范围以 [产品说明](./docs/01-product/001_prd_就业守护助手产品说明.md) 为准。当前正在做 `pdf-to-images`。
+当前里程碑是 **投前看简历**：先做不依赖评价标准的出图与抽文本。产品范围以 [产品说明](./docs/01-product/001_prd_就业守护助手产品说明.md) 为准。当前正在做 `read-resume`。
 
 当前**不做**：全员自助门户、代写简历、用分数替代老师分批、替代按日就业台账、默认使用云端语音识别、把课评「好课标准」用到简历与面试上、为两个动作各建一个仓库。
 
@@ -57,9 +57,10 @@ uv sync
 uv run employ-guard --help
 uv run employ-guard check
 uv run employ-guard pdf-to-images <简历.pdf>
+uv run employ-guard read-resume <简历.pdf>
 ```
 
-`pdf-to-images` 把投递用 PDF 按页写成 `data/output/.../pages/`（本步不评价排版）。真实简历放在 `data/input/`，不要提交。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
+`pdf-to-images` 把投递用 PDF 按页写成 `data/output/.../pages/`（本步不评价排版）。`read-resume` 抽出文本（本步不判断能不能投）。真实简历放在 `data/input/`，不要提交。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
 
 ---
 

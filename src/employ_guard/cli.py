@@ -10,6 +10,7 @@ import typer
 
 from employ_guard import __version__
 from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
+from employ_guard.read_resume import ReadResumeError, extract_resume_text
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -56,3 +57,19 @@ def pdf_to_images(
     count = len(list(pages_dir.glob("*.png")))
     typer.echo(f"已按页写出 {count} 张图片：{pages_dir}")
     typer.echo("本步只出图，不评价排版。")
+
+
+@app.command("read-resume")
+def read_resume(
+    pdf: Path = typer.Argument(..., help="投递用 PDF。本期只接受 PDF。"),
+) -> None:
+    """从 PDF 抽出文本。本步不判断能不能投，也不评价排版。"""
+    try:
+        run_dir = extract_resume_text(pdf)
+    except ReadResumeError as exc:
+        typer.secho(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    md_files = sorted(run_dir.glob("*.resume.md"))
+    typer.echo(f"已抽出文本：{md_files[0] if md_files else run_dir}")
+    typer.echo("本步不判断能不能投，也不评价排版。")
