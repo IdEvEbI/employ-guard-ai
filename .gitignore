@@ -1,0 +1,44 @@
+# 依赖与缓存
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.uv/
+.npm/
+.cache/
+
+# 媒体、简历原件与运行产物（真实材料默认不入库）
+temp/
+data/raw/
+data/input/
+data/output/
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.pdf
+*.docx
+*.doc
+
+# 密钥与环境
+.env
+.env.*
+!.env.example
+*.pem
+secrets/
+
+# 系统与编辑器
+.DS_Store
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
