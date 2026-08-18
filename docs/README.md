@@ -26,4 +26,5 @@
 2. [001 产品说明](./01-product/001_prd_就业守护助手产品说明.md)：确认工具、老师用的命令、不做什么。
 3. [上游标准引用](./02-architecture/001_upstream-standards_上游标准引用.md)：确认评价标准从哪里来。
 4. 根目录 [README.md](../README.md)：如何安装与运行 `employ-guard check`。
-5. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`（后续 Issue 添加）。
+5. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`。
+6. 新会话 Skill：`.cursor/skills/employ-guard-new-session/SKILL.md`。
