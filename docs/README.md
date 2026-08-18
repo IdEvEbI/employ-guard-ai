@@ -16,11 +16,14 @@
 
 ## 3. 交付（Issue、DevOps）
 
-`docs/03-delivery/` 将在后续 Issue 合入。当前只做什么，在落地前以 GitHub Issue 为准。
+请阅读 [03-delivery/README.md](./03-delivery/README.md)。
+
+当前只做什么，以 [开发看板](./03-delivery/001_dev-board_开发看板.md) 为准。如何开 Issue、如何合入，见 [分支与合入](./03-delivery/002_devops-workflow_分支与合入.md)。
 
 ## 4. 新会话推荐阅读顺序
 
-1. [001 产品说明](./01-product/001_prd_就业守护助手产品说明.md)：确认工具、老师用的命令、不做什么。
-2. [上游标准引用](./02-architecture/001_upstream-standards_上游标准引用.md)：确认评价标准从哪里来。
-3. 根目录 [README.md](../README.md)：如何安装与运行 `employ-guard check`。
-4. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`（后续 Issue 添加）。
+1. [开发看板](./03-delivery/001_dev-board_开发看板.md)：确认当前只做什么。
+2. [001 产品说明](./01-product/001_prd_就业守护助手产品说明.md)：确认工具、老师用的命令、不做什么。
+3. [上游标准引用](./02-architecture/001_upstream-standards_上游标准引用.md)：确认评价标准从哪里来。
+4. 根目录 [README.md](../README.md)：如何安装与运行 `employ-guard check`。
+5. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`（后续 Issue 添加）。

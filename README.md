@@ -11,7 +11,7 @@
 
 ## 1. 目标（分期）
 
-1. **投前看简历**：Word 转 PDF → 出图并查排版；读文本 → 判能不能投 → 出练习题（命令 `resume`）。
+1. **投前看简历**：出图并查排版；读文本 → 判能不能投 → 出练习题（命令 `resume`，本期只收 PDF）。
 2. **听后做复盘**：转写现场录音 → 还原问答 → 面试评价（命令 `interview`）。
 3. **后续愿景**：知识库、模拟面试、真面试入库、企业查询（都是新工具，不作为本期必须交付）。
 
@@ -23,12 +23,13 @@
 
 ## 2. 新会话请先读
 
-1. [产品说明](./docs/01-product/001_prd_就业守护助手产品说明.md)（工具、老师用的命令、验收）
-2. [上游标准引用](./docs/02-architecture/001_upstream-standards_上游标准引用.md)
-3. 开发看板与分支合入（后续 Issue）
-4. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`（后续 Issue 添加）
+1. [开发看板](./docs/03-delivery/001_dev-board_开发看板.md)：当前只做什么
+2. [产品说明](./docs/01-product/001_prd_就业守护助手产品说明.md)（工具、老师用的命令、验收）
+3. [上游标准引用](./docs/02-architecture/001_upstream-standards_上游标准引用.md)
+4. [分支与合入](./docs/03-delivery/002_devops-workflow_分支与合入.md)
+5. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`（后续 Issue 添加）
 
-老师用的命令（后续里程碑）：`employ-guard resume <简历.docx 或 pdf>`；`employ-guard interview <录音> [--resume <简历>]`。各个工具见产品说明第 4 节。
+老师用的命令（后续里程碑）：`employ-guard resume <简历.pdf>`；`employ-guard interview <录音> [--resume <简历.pdf>]`。各个工具见产品说明第 4 节。
 
 **默认技术栈**：Python 3.12 命令行（uv）· 本机 mlx-whisper（转写）· DeepSeek API · Markdown 格式化（Prettier + prettier-plugin-zh + markdownlint）
 
