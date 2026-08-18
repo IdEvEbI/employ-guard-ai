@@ -27,7 +27,8 @@
 2. [产品说明](./docs/01-product/001_prd_就业守护助手产品说明.md)（工具、老师用的命令、验收）
 3. [上游标准引用](./docs/02-architecture/001_upstream-standards_上游标准引用.md)
 4. [分支与合入](./docs/03-delivery/002_devops-workflow_分支与合入.md)
-5. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`（后续 Issue 添加）
+5. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`
+6. 新会话 Skill：`.cursor/skills/employ-guard-new-session/SKILL.md`（说「继续 / 开干」时优先按此阅读）
 
 老师用的命令（后续里程碑）：`employ-guard resume <简历.pdf>`；`employ-guard interview <录音> [--resume <简历.pdf>]`。各个工具见产品说明第 4 节。
 

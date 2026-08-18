@@ -1,6 +1,6 @@
 # 分支与合入
 
-- **版本**：v0.1
+- **版本**：v0.1.1
 - **日期**：2026-08-18
 - **状态**：GitHub Flow；每个 PR 解决一个 Issue
 - **产品源**：[产品说明](../01-product/001_prd_就业守护助手产品说明.md)
@@ -88,7 +88,8 @@
 2. [产品说明](../01-product/001_prd_就业守护助手产品说明.md)
 3. [上游标准引用](../02-architecture/001_upstream-standards_上游标准引用.md)（改评价维度时打开上游原文）
 4. 本文
-5. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`（后续 Issue 添加）
+5. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`
+6. 新会话 Skill：`.cursor/skills/employ-guard-new-session/SKILL.md`
 
 ---
 
@@ -117,6 +118,7 @@
 
 ## 9. 修订记录
 
-| 版本 | 日期       | 说明                                        |
-| ---- | ---------- | ------------------------------------------- |
-| v0.1 | 2026-08-18 | GitHub Flow：PR 打到 `main`；一 Issue 一 PR |
+| 版本   | 日期       | 说明                                        |
+| ------ | ---------- | ------------------------------------------- |
+| v0.1   | 2026-08-18 | GitHub Flow：PR 打到 `main`；一 Issue 一 PR |
+| v0.1.1 | 2026-08-18 | 阅读顺序补上 Cursor Rule 与新会话 Skill     |
