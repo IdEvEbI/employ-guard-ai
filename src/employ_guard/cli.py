@@ -1,4 +1,4 @@
-"""就业守护 AI 助手 · 命令行入口。"""
+"""就业守护 · 命令行入口。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from employ_guard import __version__
 
 app = typer.Typer(
     no_args_is_help=True,
-    help="就业守护 AI 助手：检查简历与面试录音并生成报告。",
+    help="就业守护：检查简历与面试录音并生成报告。",
 )
 
 
@@ -23,7 +23,7 @@ def version() -> None:
 
 @app.command()
 def check() -> None:
-    """检查本机是否具备后续流水线所需的基础环境。"""
+    """检查本机是否具备后续工具所需的基础环境。"""
     python_ok = sys.version_info >= (3, 12)
     ffmpeg_path = shutil.which("ffmpeg")
 

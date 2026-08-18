@@ -11,7 +11,7 @@ __pycache__/
 .npm/
 .cache/
 
-# 媒体、简历原件与运行产物（真实材料默认不入库）
+# 媒体、简历原件与运行输出（真实材料默认不入库）
 temp/
 data/raw/
 data/input/
