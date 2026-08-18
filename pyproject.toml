@@ -5,6 +5,7 @@ description = "Employment Guard AI assistant: check resumes and interview record
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "pymupdf>=1.28.2",
     "python-dotenv>=1.0.0",
     "typer>=0.16.0",
 ]
@@ -30,3 +31,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+    # PyMuPDF / SWIG 在 Python 3.12+ 上的已知噪音，与本仓逻辑无关
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+]
