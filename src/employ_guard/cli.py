@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 
 from employ_guard import __version__
+from employ_guard.check_layout import CheckLayoutError, check_layout
 from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
 
@@ -73,3 +74,48 @@ def read_resume(
     md_files = sorted(run_dir.glob("*.resume.md"))
     typer.echo(f"已抽出文本：{md_files[0] if md_files else run_dir}")
     typer.echo("本步不判断能不能投，也不评价排版。")
+
+
+@app.command("check-layout")
+def check_layout_cmd(
+    pdf: Path = typer.Argument(..., help="投递用 PDF。须已先跑过 pdf-to-images。"),
+) -> None:
+    """只凭页图查排版。本步不判断内容能不能投。"""
+    try:
+        result = check_layout(pdf)
+    except CheckLayoutError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"已写出排版报告：{result.report_md}")
+    typer.echo("本步只查排版，不判断内容能不能投。")
+
+    failed = [item for item in result.pass_line if not item.get("pass")]
+    found_defects = [item for item in result.defects if item.get("found")]
+
+    if result.layout_pass:
+        typer.secho(
+            f"结论：排版达标（共 {result.page_count} 页，对照简历合格线 §3）。",
+            fg=typer.colors.GREEN,
+            bold=True,
+        )
+        if found_defects:
+            typer.echo("仍有细项可改（未构成合格线未过）：")
+            for item in found_defects:
+                typer.echo(f"  - {item.get('code')}: {item.get('note') or '见报告'}")
+        return
+
+    typer.secho(
+        f"结论：排版未达标（共 {result.page_count} 页）。请先改合格线未过项后再投。",
+        fg=typer.colors.RED,
+        bold=True,
+        err=True,
+    )
+    typer.secho("未过项：", fg=typer.colors.RED, err=True)
+    for item in failed:
+        typer.secho(f"  - {item['id']}: {item.get('note', '')}", fg=typer.colors.RED, err=True)
+    if found_defects:
+        typer.echo("相关细项缺陷：", err=True)
+        for item in found_defects:
+            typer.echo(f"  - {item.get('code')}: {item.get('note') or '见报告'}", err=True)
+    raise typer.Exit(code=2)
