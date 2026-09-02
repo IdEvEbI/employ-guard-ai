@@ -1,7 +1,7 @@
 # 开发看板
 
-- **版本**：v0.2.5
-- **日期**：2026-09-01
+- **版本**：v0.2.6
+- **日期**：2026-09-02
 - **产品源**：[产品说明](../01-product/001_prd_就业守护助手产品说明.md)
 - **合入方式**：[分支与合入](./002_devops-workflow_分支与合入.md)
 
@@ -11,14 +11,14 @@
 
 ## 1. 当前只做什么
 
-| 项         | 口径                                                                                                                                    |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 阶段       | **投前看简历**                                                                                                                          |
-| 当前 Issue | [#17](https://github.com/IdEvEbI/employ-guard-ai/issues/17) `feat: 只凭页图查排版`（R3）                                                |
-| 做完的标志 | `check-layout` 可单独跑；只凭页图对照 [004](../04-standard/004_resume-bar_简历合格线.md) §3；合格线与水平线分开；不输出内容能不能投结论 |
-| 现在不做   | 判能不能投、出练习题、`resume` 串起来；听后做复盘；其他学科岗位合格线；另建 `005` 排版专文（书面线已在 004）                            |
+| 项         | 口径                                                                                                                                                                          |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 阶段       | **投前看简历**                                                                                                                                                                |
+| 当前 Issue | [#22](https://github.com/IdEvEbI/employ-guard-ai/issues/22) `feat: 判内容能不能投`（R4）                                                                                      |
+| 做完的标志 | `judge-resume` 可单独跑；只用 [004 §2](../04-standard/004_resume-bar_简历合格线.md) / [003](../04-standard/003_resume-standard_简历书写标准.md)；合格线与水平线分开；不评排版 |
+| 现在不做   | 出练习题、`resume` 串起来；听后做复盘；其他学科岗位合格线                                                                                                                     |
 
-标准正文（已合入）：[04-standard](../04-standard/README.md)（001～004；R2c / [#15](https://github.com/IdEvEbI/employ-guard-ai/issues/15)）。
+标准正文：[04-standard](../04-standard/README.md)。查排版：[002 技术说明](../02-architecture/002_check-layout_查排版技术说明.md)（R3 / [#17](https://github.com/IdEvEbI/employ-guard-ai/issues/17) 已完成）。
 
 ---
 
@@ -60,8 +60,8 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | R2  | `feat(resume): 从 PDF 抽出文本`               | 已完成（[#11](https://github.com/IdEvEbI/employ-guard-ai/issues/11) / PR #12） | 写出可供后续工具阅读的文本；失败有明确退出码；本步不判断能不能投                          |
 | R2b | `fix(resume): 抽出文本去掉版面空格与按页标题` | 已完成（[#13](https://github.com/IdEvEbI/employ-guard-ai/issues/13) / PR #14） | Markdown 去空格、不再按页加标题；JSON 仍按页；不猜字段名                                  |
 | R2c | `docs(bar): 简历合格线与 JD / 书写标准`       | 已完成（[#15](https://github.com/IdEvEbI/employ-guard-ai/issues/15) / PR #16） | [04-standard](../04-standard/README.md)：JD → 怎么写 → 怎么评                             |
-| R3  | `feat(layout): 只凭页图查排版`                | 进行中（[#17](https://github.com/IdEvEbI/employ-guard-ai/issues/17)）          | 只凭页图；对照 004 §3；合格线与水平线分开；不得只根据抽出来的文字假装看过版式             |
-| R4  | `feat(judge): 判内容能不能投`                 | 待开                                                                           | **须先有书面内容标准**；只用内容标准；不出练习题、不评排版；不打百分制分数                |
+| R3  | `feat(layout): 只凭页图查排版`                | 已完成（[#17](https://github.com/IdEvEbI/employ-guard-ai/issues/17) / PR #20） | 只凭页图；对照 004 §3；合格线与水平线分开                                                 |
+| R4  | `feat(judge): 判内容能不能投`                 | 进行中（[#22](https://github.com/IdEvEbI/employ-guard-ai/issues/22)）          | 只用内容标准；不出练习题、不评排版；不打百分制分数                                        |
 | R5  | `feat(questions): 出练习题`                   | 待开                                                                           | 标明推测、供练习，不是某家公司的真题；不替代「判能不能投」                                |
 | R6  | `feat(cli): resume 按顺序调用并跳过已有文件`  | 待开                                                                           | 老师一条命令跑完 R1～R5；已有结果文件则跳过；不是 PDF、出图或读文本失败不得写成「不能投」 |
 
@@ -109,3 +109,4 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | v0.2.3 | 2026-08-18 | #13 完成；当前推进简历合格线草案                |
 | v0.2.4 | 2026-08-18 | 标准迁至 04-standard；顺序 JD → 怎么写 → 怎么评 |
 | v0.2.5 | 2026-09-01 | #15 完成；当前只推进 #17 查排版                 |
+| v0.2.6 | 2026-09-02 | #17 完成；当前只推进 #22 判能不能投             |
