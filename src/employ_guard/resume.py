@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,10 +33,44 @@ from employ_guard.judge_resume import (
     judge_resume,
 )
 from employ_guard.paths import output_run_dir, resolve_input_file
-from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
+from employ_guard.pdf_to_images import (
+    RECORD_NAME as PDF_TO_IMAGES_RECORD,
+    PdfToImagesError,
+    render_pdf_to_images,
+)
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
 
 StepStatus = Literal["ran", "skipped", "failed", "disabled"]
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _json_sha256_field(path: Path) -> str | None:
+    """读取记录里的 sha256；文件缺失或字段缺失则返回 None。"""
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    value = data.get("sha256") or data.get("source_pdf_sha256")
+    return str(value) if value else None
+
+
+def _images_match_pdf(run_dir: Path, current_sha: str) -> bool:
+    return _json_sha256_field(run_dir / PDF_TO_IMAGES_RECORD) == current_sha
+
+
+def _resume_text_match_pdf(run_dir: Path, stem: str, current_sha: str) -> bool:
+    return _json_sha256_field(run_dir / f"{stem}.resume.json") == current_sha
 
 
 @dataclass
@@ -127,6 +162,7 @@ def run_resume(
     *,
     job_description: str | None = None,
     skip_questions: bool = False,
+    force: bool = False,
     dpi: int = 200,
     root: Path | None = None,
     visual_assessor: VisualAssessor | None = None,
@@ -134,7 +170,7 @@ def run_resume(
     content_assessor: ContentAssessor | None = None,
     questions_assessor: QuestionsAssessor | None = None,
 ) -> ResumeRunResult:
-    """按产品说明 §5 顺序调用各工具；已有结果文件则跳过。"""
+    """按产品说明 §5 顺序调用各工具；已有结果且 PDF 哈希一致则跳过。"""
     try:
         pdf_path = resolve_input_file(source)
     except FileNotFoundError as exc:
@@ -146,21 +182,27 @@ def run_resume(
     run_dir = output_run_dir(pdf_path, root=root)
     run_dir.mkdir(parents=True, exist_ok=True)
     stem = pdf_path.stem
+    current_sha = _sha256_file(pdf_path)
     result = ResumeRunResult(pdf_path=pdf_path, run_dir=run_dir)
 
     # --- 1. pdf-to-images ---
     pages_dir = run_dir / "pages"
     existing_pages = _list_page_images(pages_dir) if pages_dir.is_dir() else []
-    if existing_pages:
+    can_skip_images = (
+        not force and bool(existing_pages) and _images_match_pdf(run_dir, current_sha)
+    )
+    images_reran = False
+    if can_skip_images:
         result.steps.append(
             StepOutcome(
                 name="pdf-to-images",
                 status="skipped",
-                detail=f"已有 {len(existing_pages)} 张页图",
+                detail=f"已有 {len(existing_pages)} 张页图（PDF 哈希一致）",
                 path=pages_dir,
             )
         )
     else:
+        images_reran = True
         try:
             pages_dir = render_pdf_to_images(pdf_path, dpi=dpi, root=root)
         except PdfToImagesError as exc:
@@ -171,18 +213,36 @@ def run_resume(
             result.exit_code = 1
             return result
         count = len(_list_page_images(pages_dir))
+        if force and existing_pages:
+            reason = f"强制重跑，写出 {count} 张页图"
+        elif existing_pages:
+            reason = f"PDF 已变更，重新写出 {count} 张页图"
+        else:
+            reason = f"写出 {count} 张页图"
         result.steps.append(
             StepOutcome(
                 name="pdf-to-images",
                 status="ran",
-                detail=f"写出 {count} 张页图",
+                detail=reason,
                 path=pages_dir,
             )
         )
 
     # --- 2. check-layout ---
     layout_json = run_dir / f"{stem}.layout.json"
-    if layout_json.is_file():
+    layout_sha = _json_sha256_field(layout_json)
+    layout_hash_ok = (
+        layout_sha == current_sha
+        if layout_sha is not None
+        else _images_match_pdf(run_dir, current_sha)
+    )
+    can_skip_layout = (
+        not force
+        and not images_reran
+        and layout_json.is_file()
+        and layout_hash_ok
+    )
+    if can_skip_layout:
         try:
             layout_pass, layout_path = _load_layout_from_disk(run_dir, stem)
         except ResumeError as exc:
@@ -202,6 +262,7 @@ def run_resume(
             )
         )
     else:
+        had_layout = layout_json.is_file()
         try:
             layout: LayoutResult = check_layout(
                 pdf_path,
@@ -216,27 +277,40 @@ def run_resume(
             result.exit_code = 1
             return result
         result.layout_pass = layout.layout_pass
+        detail = "排版达标" if layout.layout_pass else "排版未达标"
+        if force and had_layout:
+            detail = f"强制重跑，{detail}"
+        elif had_layout:
+            detail = f"PDF 已变更，重新查排版（{detail}）"
         result.steps.append(
             StepOutcome(
                 name="check-layout",
                 status="ran",
-                detail="排版达标" if layout.layout_pass else "排版未达标",
+                detail=detail,
                 path=layout.report_md,
             )
         )
 
     # --- 3. read-resume ---
     resume_md = run_dir / f"{stem}.resume.md"
-    if resume_md.is_file():
+    can_skip_read = (
+        not force
+        and resume_md.is_file()
+        and _resume_text_match_pdf(run_dir, stem, current_sha)
+    )
+    text_reran = False
+    if can_skip_read:
         result.steps.append(
             StepOutcome(
                 name="read-resume",
                 status="skipped",
-                detail="已有抽出文本",
+                detail="已有抽出文本（PDF 哈希一致）",
                 path=resume_md,
             )
         )
     else:
+        text_reran = True
+        had_resume = resume_md.is_file()
         try:
             extract_resume_text(pdf_path, root=root)
         except ReadResumeError as exc:
@@ -246,18 +320,30 @@ def run_resume(
             result.hard_error = str(exc)
             result.exit_code = 1
             return result
+        if force and had_resume:
+            detail = "强制重跑，已抽出文本"
+        elif had_resume:
+            detail = "PDF 已变更，重新抽出文本"
+        else:
+            detail = "已抽出文本"
         result.steps.append(
             StepOutcome(
                 name="read-resume",
                 status="ran",
-                detail="已抽出文本",
+                detail=detail,
                 path=resume_md,
             )
         )
 
     # --- 4. check-writing ---
     writing_json = run_dir / f"{stem}.writing.json"
-    if writing_json.is_file():
+    can_skip_writing = (
+        not force
+        and not text_reran
+        and writing_json.is_file()
+        and _resume_text_match_pdf(run_dir, stem, current_sha)
+    )
+    if can_skip_writing:
         try:
             writing_pass, writing_path = _load_writing_from_disk(run_dir, stem)
         except ResumeError as exc:
@@ -277,6 +363,7 @@ def run_resume(
             )
         )
     else:
+        had_writing = writing_json.is_file()
         try:
             writing: WritingResult = check_writing(
                 pdf_path,
@@ -291,22 +378,35 @@ def run_resume(
             result.exit_code = 1
             return result
         result.writing_pass = writing.writing_pass
+        base = (
+            "文字表达无明显问题"
+            if writing.writing_pass
+            else f"有待改进项 {len(writing.findings)} 条"
+        )
+        if force and had_writing:
+            detail = f"强制重跑，{base}"
+        elif had_writing:
+            detail = f"PDF 已变更，重新查文字表达（{base}）"
+        else:
+            detail = base
         result.steps.append(
             StepOutcome(
                 name="check-writing",
                 status="ran",
-                detail=(
-                    "文字表达无明显问题"
-                    if writing.writing_pass
-                    else f"有待改进项 {len(writing.findings)} 条"
-                ),
+                detail=detail,
                 path=writing.report_md,
             )
         )
 
     # --- 5. judge-resume ---
     judge_json = run_dir / f"{stem}.judge.json"
-    if judge_json.is_file():
+    can_skip_judge = (
+        not force
+        and not text_reran
+        and judge_json.is_file()
+        and _resume_text_match_pdf(run_dir, stem, current_sha)
+    )
+    if can_skip_judge:
         try:
             content_pass, judge_path = _load_judge_from_disk(run_dir, stem)
         except ResumeError as exc:
@@ -326,6 +426,7 @@ def run_resume(
             )
         )
     else:
+        had_judge = judge_json.is_file()
         try:
             judged: JudgeResult = judge_resume(
                 pdf_path,
@@ -341,11 +442,18 @@ def run_resume(
             result.exit_code = 1
             return result
         result.content_pass = judged.content_pass
+        base = "内容达标" if judged.content_pass else "内容未达标"
+        if force and had_judge:
+            detail = f"强制重跑，{base}"
+        elif had_judge:
+            detail = f"PDF 已变更，重新判断（{base}）"
+        else:
+            detail = base
         result.steps.append(
             StepOutcome(
                 name="judge-resume",
                 status="ran",
-                detail="内容达标" if judged.content_pass else "内容未达标",
+                detail=detail,
                 path=judged.report_md,
             )
         )
@@ -361,7 +469,13 @@ def run_resume(
         )
     else:
         questions_json = run_dir / f"{stem}.questions.json"
-        if questions_json.is_file():
+        can_skip_questions = (
+            not force
+            and not text_reran
+            and questions_json.is_file()
+            and _resume_text_match_pdf(run_dir, stem, current_sha)
+        )
+        if can_skip_questions:
             try:
                 count, questions_path = _load_questions_from_disk(run_dir, stem)
             except ResumeError as exc:
@@ -376,11 +490,12 @@ def run_resume(
                 StepOutcome(
                     name="draft-questions",
                     status="skipped",
-                    detail=f"已有 {count} 道练习题",
+                    detail=f"已有 {count} 道练习题（PDF 哈希一致）",
                     path=questions_path,
                 )
             )
         else:
+            had_questions = questions_json.is_file()
             try:
                 questions: QuestionsResult = draft_questions(
                     pdf_path,
@@ -396,11 +511,18 @@ def run_resume(
                 result.exit_code = 1
                 return result
             result.questions_count = len(questions.questions)
+            base = f"写出 {len(questions.questions)} 道练习题"
+            if force and had_questions:
+                detail = f"强制重跑，{base}"
+            elif had_questions:
+                detail = f"PDF 已变更，重新出题（{base}）"
+            else:
+                detail = base
             result.steps.append(
                 StepOutcome(
                     name="draft-questions",
                     status="ran",
-                    detail=f"写出 {len(questions.questions)} 道练习题",
+                    detail=detail,
                     path=questions.report_md,
                 )
             )

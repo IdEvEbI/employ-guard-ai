@@ -296,9 +296,14 @@ def resume_cmd(
         "--no-questions",
         help="关掉出练习题这一步。",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="强制重跑各步，忽略已有结果文件。",
+    ),
     dpi: int = typer.Option(200, "--dpi", help="出图分辨率，默认 200。"),
 ) -> None:
-    """投前看简历：按顺序调用各工具；已有结果文件则跳过。"""
+    """投前看简历：按顺序调用各工具；已有结果且 PDF 未变则跳过。"""
     job_text: str | None = None
     if job_desc is not None:
         if not job_desc.is_file():
@@ -311,6 +316,7 @@ def resume_cmd(
             pdf,
             job_description=job_text,
             skip_questions=no_questions,
+            force=force,
             dpi=dpi,
         )
     except ResumeError as exc:

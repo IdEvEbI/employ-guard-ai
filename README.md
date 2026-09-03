@@ -15,7 +15,7 @@
 2. **听后做复盘**：转写现场录音 → 还原问答 → 面试评价（命令 `interview`）。
 3. **后续愿景**：知识库、模拟面试、真面试入库、企业查询（都是新工具，不作为本期必须交付）。
 
-当前里程碑是 **投前看简历 · 排查增强**：R1～R6 已可演示；听后做复盘暂缓。当前推进看板同步（[#34](https://github.com/IdEvEbI/employ-guard-ai/issues/34)）；合入后下一件为 R7（`--force` 与哈希跳过）。顺序见 [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) §5。
+当前里程碑是 **投前看简历 · 排查增强**：R1～R6 已可演示；听后做复盘暂缓。当前推进 **R7**（`--force` 与 PDF 哈希跳过 / [#36](https://github.com/IdEvEbI/employ-guard-ai/issues/36)）。顺序见 [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) §5。
 
 当前**不做**：全员自助门户、代写简历、用分数替代老师分批、替代按日就业台账、默认使用云端语音识别、把课评「好课标准」用到简历与面试上、为两个动作各建一个仓库。
 
@@ -69,7 +69,7 @@ uv run employ-guard resume <简历.pdf>
 
 `judge-resume` 只凭文本对照 [004 §2](./docs/04-standard/004_resume-bar_简历合格线.md) 判能不能投（须先 read-resume；[003 技术说明](./docs/02-architecture/003_judge-resume_判能不能投技术说明.md)）。`draft-questions` 根据简历文本出练习题（须先 read-resume；[005 技术说明](./docs/02-architecture/005_draft-questions_出练习题技术说明.md)）；标明推测、供练习，不是某家公司的真题。
 
-`resume` 按产品说明 §5 顺序调用上述工具；已有结果文件则跳过；可用 `--no-questions` 关掉出练习题（[006 技术说明](./docs/02-architecture/006_resume_投前看简历技术说明.md)）。
+`resume` 按产品说明 §5 顺序调用上述工具；已有结果且 PDF 哈希一致则跳过；`--force` 强制重跑；可用 `--no-questions` 关掉出练习题（[006 技术说明](./docs/02-architecture/006_resume_投前看简历技术说明.md)）。
 
 真实简历放在 `data/input/`，不要提交。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
 

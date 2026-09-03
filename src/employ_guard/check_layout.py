@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 from collections.abc import Callable
@@ -15,6 +16,14 @@ from employ_guard.vision import VisionError, chat_with_images
 
 MAX_PASS_PAGES = 4
 PDF_TO_IMAGES_RECORD = "pdf-to-images.json"
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 SYSTEM_PROMPT = """你是简历「排版」检查员。只根据页图判断版式。
 禁止：评价项目写得好不好；判断内容能不能投递；把 Q1～Q3 改写成「信息密度 / 行距观感 / 多页风格统一」等其它含义。
@@ -435,6 +444,7 @@ def check_layout(
         "layout_pass": layout_pass,
         "standard": "docs/04-standard/004_resume-bar_简历合格线.md#3",
         "input": str(pdf_path),
+        "source_pdf_sha256": _sha256_file(pdf_path),
         "pages_dir": str(pages_dir),
         "page_count": page_count,
         "pages": [path.name for path in pages],
