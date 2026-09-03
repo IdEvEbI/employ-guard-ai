@@ -1,6 +1,6 @@
 # 投前看简历（resume）技术说明
 
-- **版本**：v0.2
+- **版本**：v0.3
 - **日期**：2026-09-03
 - **对应命令**：`employ-guard resume`
 - **产品**：[产品说明 §5](../01-product/001_prd_就业守护助手产品说明.md)
@@ -12,11 +12,12 @@
 | 输入   | **必须是 PDF**；非 PDF 直接失败并说明请先转成 PDF                                             |
 | 做什么 | 按顺序调用各工具；老师一条命令跑完出图 → 查排版 → 读文本 → 查文字表达 → 判能不能投 → 出练习题 |
 | 跳过   | 对应结果已存在 **且** 输入 PDF 的 sha256 与记录一致时才跳过                                   |
-| 强制   | `--force` 忽略已有产物，各步重跑（`--no-questions` 仍可关掉出练习题）                         |
+| 强制   | `--force` 忽略已有产物，各步重跑                                                              |
+| 排查   | `--triage`：关掉出练习题与查文字表达；写出短 `{stem}.brief.md`；终端突出三行结论 + 改法 ≤3 条 |
 | 可关   | `--no-questions` 关掉出练习题；`--job-desc` 可选传给判能不能投与出练习题                      |
 | 不做   | 不合并内容与排版结论；不自动扫描全班目录；不把出图/读文本失败写成「不能投」                   |
 
-各工具仍可单独再跑。本命令只编排，不另立评价口径。
+各工具仍可单独再跑。本命令只编排，不另立评价口径。教练摘要只做阅读入口，合格线仍以 layout / judge 报告为准。
 
 ## 2. 调用顺序与产物
 
@@ -25,11 +26,11 @@
 | 1    | `pdf-to-images`   | 已有页图，且 `pdf-to-images.json` 的 `sha256` 与当前 PDF 一致     | `pages/*.png`、`pdf-to-images.json`       |
 | 2    | `check-layout`    | 已有 `{stem}.layout.json`，且出图记录 PDF 哈希一致                | `{stem}.layout.md` / `.json`              |
 | 3    | `read-resume`     | 已有 `{stem}.resume.md`，且 `{stem}.resume.json` 的 `sha256` 一致 | `{stem}.resume.md` / `.json`              |
-| 4    | `check-writing`   | 已有 writing 报告，且 `resume.json` 的 PDF 哈希一致               | `{stem}.writing.md` / `.json`             |
+| 4    | `check-writing`   | 已有 writing 报告且哈希一致；**排查模式下关闭**                   | `{stem}.writing.md` / `.json`             |
 | 5    | `judge-resume`    | 已有 judge 报告，且 `resume.json` 的 PDF 哈希一致                 | `{stem}.judge.md` / `.json`               |
-| 6    | `draft-questions` | 已有 questions 报告且哈希一致，或已关闭                           | `{stem}.questions.md` / `.json`（可关闭） |
+| 6    | `draft-questions` | 已有 questions 报告且哈希一致，或已关闭 / **排查模式**            | `{stem}.questions.md` / `.json`（可关闭） |
 
-PDF 改稿后若文件名不变，哈希会变，各步自动重跑，不得沿用旧报告。若本趟已重跑出图或抽文本，下游步骤即使磁盘上仍有旧报告也会重跑（避免「上游刚写完新哈希、下游误跳过」）。运行目录约定见 `paths.output_run_dir`。实现入口：`src/employ_guard/resume.py` 的 `run_resume`。
+每次非硬失败结束时写出 `{stem}.brief.md`（排版 / 内容分栏；建议先改 ≤3 条；指向详细报告）。PDF 改稿后若文件名不变，哈希会变，各步自动重跑。若本趟已重跑出图或抽文本，下游不误跳过。实现入口：`src/employ_guard/resume.py`。
 
 ## 3. 退出码
 
@@ -41,4 +42,4 @@ PDF 改稿后若文件名不变，哈希会变，各步自动重跑，不得沿�
 
 ## 4. 测试
 
-单元测试注入假的 vision / writing / content / questions assessor；覆盖同哈希跳过、改稿失效、`--force`；真实密钥与真实简历不进 Git。
+单元测试注入假 assessor；覆盖哈希跳过、`--force`、`--triage` / brief；真实密钥与真实简历不进 Git。

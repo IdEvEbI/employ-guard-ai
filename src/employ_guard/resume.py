@@ -96,6 +96,9 @@ class ResumeRunResult:
     questions_count: int | None = None
     exit_code: int = 0
     hard_error: str | None = None
+    triage: bool = False
+    actions: list[str] = field(default_factory=list)
+    brief_path: Path | None = None
 
 
 class ResumeError(Exception):
@@ -117,6 +120,107 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ResumeError(f"已有结果格式无效：{path.name}")
     return data
+
+
+def _pass_label(value: bool | None, *, skipped: str = "未查") -> str:
+    if value is True:
+        return "达标"
+    if value is False:
+        return "未达标"
+    return skipped
+
+
+def _collect_actions(run_dir: Path, stem: str, *, limit: int = 3) -> list[str]:
+    """从排版 / 内容报告收集可执行改法，最多 limit 条。"""
+    tips: list[str] = []
+    seen: set[str] = set()
+
+    def _add(note: str) -> None:
+        text = note.strip()
+        if not text or text in seen:
+            return
+        seen.add(text)
+        tips.append(text)
+
+    layout_json = run_dir / f"{stem}.layout.json"
+    if layout_json.is_file():
+        data = _read_json(layout_json)
+        if not data.get("layout_pass"):
+            for tip in data.get("revision_tips") or []:
+                _add(str(tip))
+            for item in data.get("pass_line") or []:
+                if isinstance(item, dict) and not item.get("pass"):
+                    code = item.get("id") or "?"
+                    note = item.get("note") or "见排版报告"
+                    _add(f"排版 {code}：{note}")
+
+    judge_json = run_dir / f"{stem}.judge.json"
+    if judge_json.is_file():
+        data = _read_json(judge_json)
+        if not data.get("content_pass"):
+            for note in data.get("main_blockers") or []:
+                _add(str(note))
+            for item in data.get("pass_line") or []:
+                if isinstance(item, dict) and not item.get("pass"):
+                    code = item.get("id") or "?"
+                    note = item.get("note") or "见内容报告"
+                    _add(f"内容 {code}：{note}")
+
+    return tips[:limit]
+
+
+def write_brief(result: ResumeRunResult) -> Path:
+    """写出短教练摘要；不合并合格线口径。"""
+    stem = result.pdf_path.stem
+    path = result.run_dir / f"{stem}.brief.md"
+    if result.triage and result.writing_pass is None:
+        writing_line = "排查模式未查"
+    elif result.writing_pass is True:
+        writing_line = "无明显问题"
+    elif result.writing_pass is False:
+        writing_line = "有待改进（不自动等同不能投）"
+    else:
+        writing_line = "未得到结论"
+
+    lines = [
+        "# 投前看简历 · 教练摘要",
+        "",
+        f"- 输入：`{result.pdf_path.name}`",
+        f"- 模式：{'排查（triage）' if result.triage else '完整'}",
+        f"- 排版：{_pass_label(result.layout_pass)}",
+        f"- 内容：{_pass_label(result.content_pass)}",
+        f"- 文字表达：{writing_line}",
+        "",
+        "## 建议先改（最多 3 条）",
+        "",
+    ]
+    if result.actions:
+        for tip in result.actions:
+            lines.append(f"- {tip}")
+    else:
+        if result.layout_pass and result.content_pass:
+            lines.append("- 排版与内容均达标；可按详细报告微调水平线项。")
+        else:
+            lines.append("- 见下方详细报告中的未过项。")
+
+    lines.extend(
+        [
+            "",
+            "## 详细报告",
+            "",
+            f"- 排版：`{stem}.layout.md`",
+            f"- 内容：`{stem}.judge.md`",
+        ]
+    )
+    if result.writing_pass is not None:
+        lines.append(f"- 文字表达：`{stem}.writing.md`")
+    if result.questions_count is not None:
+        lines.append(f"- 练习题：`{stem}.questions.md`（{result.questions_count} 道，推测）")
+    elif result.triage:
+        lines.append("- 练习题：排查模式未出")
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
 
 
 def _load_layout_from_disk(run_dir: Path, stem: str) -> tuple[bool, Path]:
@@ -162,6 +266,7 @@ def run_resume(
     *,
     job_description: str | None = None,
     skip_questions: bool = False,
+    triage: bool = False,
     force: bool = False,
     dpi: int = 200,
     root: Path | None = None,
@@ -179,11 +284,14 @@ def run_resume(
     if pdf_path.suffix.lower() != ".pdf":
         raise ResumeError("输入不是 PDF，请先转成 PDF 再检查。")
 
+    skip_questions = skip_questions or triage
+    skip_writing = triage
+
     run_dir = output_run_dir(pdf_path, root=root)
     run_dir.mkdir(parents=True, exist_ok=True)
     stem = pdf_path.stem
     current_sha = _sha256_file(pdf_path)
-    result = ResumeRunResult(pdf_path=pdf_path, run_dir=run_dir)
+    result = ResumeRunResult(pdf_path=pdf_path, run_dir=run_dir, triage=triage)
 
     # --- 1. pdf-to-images ---
     pages_dir = run_dir / "pages"
@@ -337,66 +445,75 @@ def run_resume(
 
     # --- 4. check-writing ---
     writing_json = run_dir / f"{stem}.writing.json"
-    can_skip_writing = (
-        not force
-        and not text_reran
-        and writing_json.is_file()
-        and _resume_text_match_pdf(run_dir, stem, current_sha)
-    )
-    if can_skip_writing:
-        try:
-            writing_pass, writing_path = _load_writing_from_disk(run_dir, stem)
-        except ResumeError as exc:
-            result.steps.append(
-                StepOutcome(name="check-writing", status="failed", detail=str(exc))
-            )
-            result.hard_error = str(exc)
-            result.exit_code = 1
-            return result
-        result.writing_pass = writing_pass
+    if skip_writing:
         result.steps.append(
             StepOutcome(
                 name="check-writing",
-                status="skipped",
-                detail="文字表达无明显问题" if writing_pass else "有待改进项（沿用已有报告）",
-                path=writing_path,
+                status="disabled",
+                detail="排查模式未查文字表达",
             )
         )
     else:
-        had_writing = writing_json.is_file()
-        try:
-            writing: WritingResult = check_writing(
-                pdf_path,
-                root=root,
-                writing_assessor=writing_assessor,
-            )
-        except CheckWritingError as exc:
+        can_skip_writing = (
+            not force
+            and not text_reran
+            and writing_json.is_file()
+            and _resume_text_match_pdf(run_dir, stem, current_sha)
+        )
+        if can_skip_writing:
+            try:
+                writing_pass, writing_path = _load_writing_from_disk(run_dir, stem)
+            except ResumeError as exc:
+                result.steps.append(
+                    StepOutcome(name="check-writing", status="failed", detail=str(exc))
+                )
+                result.hard_error = str(exc)
+                result.exit_code = 1
+                return result
+            result.writing_pass = writing_pass
             result.steps.append(
-                StepOutcome(name="check-writing", status="failed", detail=str(exc))
+                StepOutcome(
+                    name="check-writing",
+                    status="skipped",
+                    detail="文字表达无明显问题" if writing_pass else "有待改进项（沿用已有报告）",
+                    path=writing_path,
+                )
             )
-            result.hard_error = str(exc)
-            result.exit_code = 1
-            return result
-        result.writing_pass = writing.writing_pass
-        base = (
-            "文字表达无明显问题"
-            if writing.writing_pass
-            else f"有待改进项 {len(writing.findings)} 条"
-        )
-        if force and had_writing:
-            detail = f"强制重跑，{base}"
-        elif had_writing:
-            detail = f"PDF 已变更，重新查文字表达（{base}）"
         else:
-            detail = base
-        result.steps.append(
-            StepOutcome(
-                name="check-writing",
-                status="ran",
-                detail=detail,
-                path=writing.report_md,
+            had_writing = writing_json.is_file()
+            try:
+                writing: WritingResult = check_writing(
+                    pdf_path,
+                    root=root,
+                    writing_assessor=writing_assessor,
+                )
+            except CheckWritingError as exc:
+                result.steps.append(
+                    StepOutcome(name="check-writing", status="failed", detail=str(exc))
+                )
+                result.hard_error = str(exc)
+                result.exit_code = 1
+                return result
+            result.writing_pass = writing.writing_pass
+            base = (
+                "文字表达无明显问题"
+                if writing.writing_pass
+                else f"有待改进项 {len(writing.findings)} 条"
             )
-        )
+            if force and had_writing:
+                detail = f"强制重跑，{base}"
+            elif had_writing:
+                detail = f"PDF 已变更，重新查文字表达（{base}）"
+            else:
+                detail = base
+            result.steps.append(
+                StepOutcome(
+                    name="check-writing",
+                    status="ran",
+                    detail=detail,
+                    path=writing.report_md,
+                )
+            )
 
     # --- 5. judge-resume ---
     judge_json = run_dir / f"{stem}.judge.json"
@@ -460,11 +577,16 @@ def run_resume(
 
     # --- 6. draft-questions（可关）---
     if skip_questions:
+        detail = (
+            "排查模式未出练习题"
+            if triage
+            else "已按选项跳过出练习题"
+        )
         result.steps.append(
             StepOutcome(
                 name="draft-questions",
                 status="disabled",
-                detail="已按选项跳过出练习题",
+                detail=detail,
             )
         )
     else:
@@ -533,4 +655,7 @@ def run_resume(
         result.exit_code = 2
     else:
         result.exit_code = 0
+
+    result.actions = _collect_actions(run_dir, stem, limit=3)
+    result.brief_path = write_brief(result)
     return result

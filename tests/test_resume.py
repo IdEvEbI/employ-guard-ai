@@ -224,6 +224,57 @@ def test_no_questions_flag(tmp_path: Path) -> None:
     q_step = next(s for s in result.steps if s.name == "draft-questions")
     assert q_step.status == "disabled"
     assert not (result.run_dir / "nq.questions.json").is_file()
+    assert result.brief_path is not None
+    assert result.brief_path.is_file()
+
+
+def test_triage_skips_writing_and_questions_writes_brief(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "triage.pdf"
+    _write_pdf(pdf)
+    result = run_resume(pdf, root=tmp_path, triage=True, **_inject())
+    assert result.exit_code == 0
+    assert result.triage is True
+    assert result.writing_pass is None
+    assert result.questions_count is None
+    writing = next(s for s in result.steps if s.name == "check-writing")
+    questions = next(s for s in result.steps if s.name == "draft-questions")
+    assert writing.status == "disabled"
+    assert questions.status == "disabled"
+    assert result.brief_path is not None
+    text = result.brief_path.read_text(encoding="utf-8")
+    assert "教练摘要" in text
+    assert "排查" in text
+    assert "排版：达标" in text
+    assert "内容：达标" in text
+    assert not (result.run_dir / "triage.writing.json").is_file()
+    assert not (result.run_dir / "triage.questions.json").is_file()
+
+
+def test_triage_brief_lists_actions_when_layout_fails(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "triage-fail.pdf"
+    _write_pdf(pdf)
+    result = run_resume(
+        pdf,
+        root=tmp_path,
+        triage=True,
+        **_inject(visual_assessor=_fail_visual),
+    )
+    assert result.exit_code == 2
+    assert result.layout_pass is False
+    assert result.actions
+    assert len(result.actions) <= 3
+    assert result.brief_path is not None
+    body = result.brief_path.read_text(encoding="utf-8")
+    assert "建议先改" in body
+    assert result.actions[0] in body
+
+
+def test_full_pass_also_writes_brief(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "brief-full.pdf"
+    _write_pdf(pdf)
+    result = run_resume(pdf, root=tmp_path, **_inject())
+    assert result.brief_path is not None
+    assert "完整" in result.brief_path.read_text(encoding="utf-8")
 
 
 def test_cli_resume_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
