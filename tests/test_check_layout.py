@@ -48,6 +48,7 @@ def _pass_visual(_pages: list[Path]) -> dict:
             {"code": "bullet_inconsistent", "found": True, "pages": [1], "note": "圆点与方块混用"},
             {"code": "alignment", "found": False, "pages": [], "note": ""},
             {"code": "tight_spacing", "found": False, "pages": [], "note": ""},
+            {"code": "font_inconsistent", "found": False, "pages": [], "note": ""},
         ],
     }
 
@@ -94,6 +95,34 @@ def test_rejects_non_pdf(tmp_path: Path) -> None:
         check_layout(fake, root=tmp_path, visual_assessor=_pass_visual)
 
 
+def test_revision_tips_always_include_font_human_review() -> None:
+    from employ_guard.check_layout import FONT_HUMAN_REVIEW_TIP, build_revision_tips
+
+    tips = build_revision_tips(
+        page_count=3,
+        pass_line=[{"id": "P1", "pass": True}],
+        defects=[
+            {"code": "font_inconsistent", "found": False, "pages": [], "note": ""},
+        ],
+    )
+    assert FONT_HUMAN_REVIEW_TIP in tips
+
+    tips_found = build_revision_tips(
+        page_count=3,
+        pass_line=[{"id": "P1", "pass": True}],
+        defects=[
+            {
+                "code": "font_inconsistent",
+                "found": True,
+                "pages": [1, 2],
+                "note": "第1页技能区字号大于第2页项目正文。",
+            },
+        ],
+    )
+    assert any("技能区字号" in tip for tip in tips_found)
+    assert FONT_HUMAN_REVIEW_TIP not in tips_found
+
+
 def test_writes_layout_when_pages_exist(tmp_path: Path) -> None:
     pdf = tmp_path / "data" / "input" / "resumes" / "ok.pdf"
     _write_pdf(pdf, ["A", "B"])
@@ -119,7 +148,13 @@ def test_fails_p1_when_too_many_pages(tmp_path: Path) -> None:
     assert result.layout_pass is False
     assert data["pass_line"][0]["pass"] is False
     assert data["level_line"] == []
-    assert "未过合格线" in result.report_md.read_text(encoding="utf-8")
+    assert result.revision_tips
+    assert any("4 页" in tip for tip in result.revision_tips)
+    assert any("人工再看" in tip for tip in result.revision_tips)
+    report = result.report_md.read_text(encoding="utf-8")
+    assert "未过合格线" in report
+    assert "改稿要点" in report
+    assert "人工再看" in report
 
 
 def test_cli_writes_report_and_pass_verdict(
@@ -140,6 +175,7 @@ def test_cli_writes_report_and_pass_verdict(
     assert "排版报告" in result.stdout
     assert "排版达标" in result.stdout
     assert "不判断内容" in result.stdout
+    assert "人工再看" in result.stdout or "字体" in result.stdout
     assert (tmp_path / "data" / "output" / "demo" / "demo.layout.md").is_file()
 
 
