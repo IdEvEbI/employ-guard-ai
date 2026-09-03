@@ -1,8 +1,9 @@
-"""老师命令 resume：按顺序调用并跳过已有文件。"""
+"""老师命令 resume：布局路径与文本路径并行，已有结果则跳过。"""
 
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pymupdf
@@ -10,7 +11,7 @@ import pytest
 from typer.testing import CliRunner
 
 from employ_guard.cli import app
-from employ_guard.resume import ResumeError, run_resume
+from employ_guard.resume import STEP_ORDER, ResumeError, run_resume
 
 runner = CliRunner()
 
@@ -133,6 +134,7 @@ def test_full_pass_exit_0(tmp_path: Path) -> None:
     assert result.layout_pass is True
     assert result.content_pass is True
     assert result.questions_count == 1
+    assert [s.name for s in result.steps] == list(STEP_ORDER)
     assert all(s.status == "ran" for s in result.steps if s.name != "draft-questions")
     assert result.steps[-1].name == "draft-questions"
     assert result.steps[-1].status == "ran"
@@ -142,6 +144,32 @@ def test_full_pass_exit_0(tmp_path: Path) -> None:
     assert (result.run_dir / "demo.writing.json").is_file()
     assert (result.run_dir / "demo.judge.json").is_file()
     assert (result.run_dir / "demo.questions.json").is_file()
+
+
+def test_layout_and_text_paths_overlap_wall_clock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """布局路径与文本路径应重叠执行，墙钟短于两路串行之和。"""
+    pdf = tmp_path / "data" / "input" / "parallel.pdf"
+    _write_pdf(pdf)
+
+    def _slow_visual(pages: list[Path]) -> dict:
+        time.sleep(0.15)
+        return _pass_visual(pages)
+
+    def _slow_content(text: str, job_description: str | None = None) -> dict:
+        time.sleep(0.15)
+        return _pass_content(text, job_description)
+
+    started = time.perf_counter()
+    result = run_resume(
+        pdf,
+        root=tmp_path,
+        **_inject(visual_assessor=_slow_visual, content_assessor=_slow_content),
+    )
+    wall_ms = (time.perf_counter() - started) * 1000
+    assert result.exit_code == 0
+    assert [s.name for s in result.steps] == list(STEP_ORDER)
+    # 若串行，仅这两步就约 300ms；并行应明显更短
+    assert wall_ms < 280, f"expected overlap, wall={wall_ms:.0f}ms"
 
 
 def test_layout_fail_still_finishes_exit_2(tmp_path: Path) -> None:
@@ -286,6 +314,8 @@ def test_progress_emits_start_and_finish(tmp_path: Path) -> None:
     assert any("正在 PDF 出图" in m for m in messages)
     assert any("正在 查排版" in m for m in messages)
     assert any("正在 判能不能投" in m for m in messages)
+    assert any("[1/6]" in m for m in messages)
+    assert any("[3/6]" in m for m in messages)
     assert any("· 已跑 ·" in m and "ms" in m for m in messages)
     assert all(s.elapsed_ms is not None for s in result.steps)
     # 6 steps × (start + finish)
