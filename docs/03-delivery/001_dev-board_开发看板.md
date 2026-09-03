@@ -1,6 +1,6 @@
 # 开发看板
 
-- **版本**：v0.2.8
+- **版本**：v0.2.9
 - **日期**：2026-09-03
 - **产品源**：[产品说明](../01-product/001_prd_就业守护助手产品说明.md)
 - **合入方式**：[分支与合入](./002_devops-workflow_分支与合入.md)
@@ -11,14 +11,14 @@
 
 ## 1. 当前只做什么
 
-| 项         | 口径                                                                                                                                                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 阶段       | **投前看简历**                                                                                                                                                                                         |
-| 当前 Issue | 下一件：**R5 出练习题**（尚未开 Issue）；R4 / R4b 已合入（[#22](https://github.com/IdEvEbI/employ-guard-ai/issues/22) / PR #25；[#24](https://github.com/IdEvEbI/employ-guard-ai/issues/24) / PR #27） |
-| 做完的标志 | 开出 R5 Issue 并实现 `draft-questions`：标明推测的练习题；不替代「判能不能投」；不写成企业真题                                                                                                         |
-| 现在不做   | 未完成 R5 前不串完整 `resume`（R6）；听后做复盘；其他学科岗位合格线                                                                                                                                    |
+| 项         | 口径                                                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| 阶段       | **投前看简历**                                                                                                   |
+| 当前 Issue | [#30](https://github.com/IdEvEbI/employ-guard-ai/issues/30) `feat: 出练习题 draft-questions`（R5）               |
+| 做完的标志 | `draft-questions` 可单独跑；标明推测、供练习，不是某家公司的真题；不替代「判能不能投」；写出 questions.md / json |
+| 现在不做   | 未完成 R5 前不串完整 `resume`（R6）；听后做复盘；GUI / LangChain / LangGraph；几何排版补强（R3b，R6 后再评估）   |
 
-标准正文：[04-standard](../04-standard/README.md)。查排版：[002](../02-architecture/002_check-layout_查排版技术说明.md)（R3 已完成）。查文字表达：[004](../02-architecture/004_check-writing_查文字表达技术说明.md)（R4b 已完成）。判能不能投：[003](../02-architecture/003_judge-resume_判能不能投技术说明.md)（R4 已完成）。
+标准正文：[04-standard](../04-standard/README.md)。查排版：[002](../02-architecture/002_check-layout_查排版技术说明.md)（R3 已完成）。查文字表达：[004](../02-architecture/004_check-writing_查文字表达技术说明.md)（R4b 已完成）。判能不能投：[003](../02-architecture/003_judge-resume_判能不能投技术说明.md)（R4 已完成）。出练习题：[005](../02-architecture/005_draft-questions_出练习题技术说明.md)。
 
 ---
 
@@ -63,7 +63,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | R3  | `feat(layout): 只凭页图查排版`                | 已完成（[#17](https://github.com/IdEvEbI/employ-guard-ai/issues/17) / PR #20） | 只凭页图；对照 004 §3；合格线与水平线分开                                                                     |
 | R4  | `feat(judge): 判内容能不能投`                 | 已完成（[#22](https://github.com/IdEvEbI/employ-guard-ai/issues/22) / PR #25） | 只用内容标准；不出练习题、不评排版；不打百分制分数；含可信度存疑与水平线封顶（样本反馈）                      |
 | R4b | `feat(writing): 查文字表达`                   | 已完成（[#24](https://github.com/IdEvEbI/employ-guard-ai/issues/24) / PR #27） | 对照 003 §3.5；规则 + LLM；不判能不能投；有问题退出码 0；技能「熟练」模板与分组提示                           |
-| R5  | `feat(questions): 出练习题`                   | 待开                                                                           | 标明推测、供练习，不是某家公司的真题；不替代「判能不能投」                                                    |
+| R5  | `feat(questions): 出练习题`                   | 进行中（[#30](https://github.com/IdEvEbI/employ-guard-ai/issues/30)）          | 标明推测、供练习，不是某家公司的真题；不替代「判能不能投」                                                    |
 | R6  | `feat(cli): resume 按顺序调用并跳过已有文件`  | 待开                                                                           | 老师一条命令跑完 R1～R5（含 check-writing）；已有结果文件则跳过；不是 PDF、出图或读文本失败不得写成「不能投」 |
 
 投前看简历做完的标志：维护者对若干份真实投递简历跑通 `resume`，内容结论与排版结论分开写，并愿意拿它抽查「投递一周零邀约」的简历。详见 [产品说明第 11.1 节](../01-product/001_prd_就业守护助手产品说明.md)。
@@ -113,3 +113,4 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | v0.2.6 | 2026-09-02 | #17 完成；当前只推进 #22 判能不能投                        |
 | v0.2.7 | 2026-09-03 | #24 查文字表达待合入；顺带收口可信度 / 字体细项；下一件 R5 |
 | v0.2.8 | 2026-09-03 | #22 / #24 已合入；当前推进 R5 出练习题                     |
+| v0.2.9 | 2026-09-03 | 当前只推进 #30 出练习题；几何 / GUI / Lang\* 不插队        |
