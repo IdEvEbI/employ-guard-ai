@@ -15,7 +15,9 @@ from employ_guard.draft_questions import DraftQuestionsError, draft_questions
 from employ_guard.judge_resume import JudgeResumeError, judge_resume
 from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
+from employ_guard.paths import resolve_input_path
 from employ_guard.resume import ResumeError, run_resume
+from employ_guard.resume_batch import run_resume_batch
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -283,53 +285,8 @@ def draft_questions_cmd(
         typer.echo(f"  … 另有 {len(result.questions) - 5} 道，见报告。")
 
 
-@app.command("resume")
-def resume_cmd(
-    pdf: Path = typer.Argument(..., help="投递用 PDF。本期只接受 PDF。"),
-    job_desc: Path | None = typer.Option(
-        None,
-        "--job-desc",
-        help="可选：目标岗位说明文本文件（传给判能不能投与出练习题）。",
-    ),
-    no_questions: bool = typer.Option(
-        False,
-        "--no-questions",
-        help="关掉出练习题这一步。",
-    ),
-    triage: bool = typer.Option(
-        False,
-        "--triage",
-        help="排查模式：关掉出练习题与查文字表达，并写出短教练摘要。",
-    ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        help="强制重跑各步，忽略已有结果文件。",
-    ),
-    dpi: int = typer.Option(200, "--dpi", help="出图分辨率，默认 200。"),
-) -> None:
-    """投前看简历：布局路径与文本路径并行；已有结果且 PDF 未变则跳过。"""
-    job_text: str | None = None
-    if job_desc is not None:
-        if not job_desc.is_file():
-            typer.secho(f"找不到岗位说明：{job_desc}", err=True, fg=typer.colors.RED)
-            raise typer.Exit(code=1)
-        job_text = job_desc.read_text(encoding="utf-8")
-
-    try:
-        result = run_resume(
-            pdf,
-            job_description=job_text,
-            skip_questions=no_questions,
-            triage=triage,
-            force=force,
-            dpi=dpi,
-            progress=typer.echo,
-        )
-    except ResumeError as exc:
-        typer.secho(str(exc), err=True, fg=typer.colors.RED)
-        raise typer.Exit(code=1) from exc
-
+def _print_single_resume_result(result, *, triage: bool, no_questions: bool) -> None:  # type: ignore[no-untyped-def]
+    """打印单份 resume 终端摘要并按退出码退出。"""
     typer.echo(f"运行目录：{result.run_dir}")
     if result.brief_path is not None:
         typer.echo(f"教练摘要：{result.brief_path}")
@@ -412,4 +369,91 @@ def resume_cmd(
         fg=typer.colors.GREEN,
         bold=True,
     )
+
+
+@app.command("resume")
+def resume_cmd(
+    source: Path = typer.Argument(
+        ...,
+        help="投递用 PDF，或含 PDF 的目录（批跑写本地总表）。本期只接受 PDF。",
+    ),
+    job_desc: Path | None = typer.Option(
+        None,
+        "--job-desc",
+        help="可选：目标岗位说明文本文件（传给判能不能投与出练习题）。",
+    ),
+    no_questions: bool = typer.Option(
+        False,
+        "--no-questions",
+        help="关掉出练习题这一步。",
+    ),
+    triage: bool = typer.Option(
+        False,
+        "--triage",
+        help="排查模式：关掉出练习题与查文字表达，并写出短教练摘要。",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="强制重跑各步，忽略已有结果文件。",
+    ),
+    dpi: int = typer.Option(200, "--dpi", help="出图分辨率，默认 200。"),
+) -> None:
+    """投前看简历：单份或目录批跑；已有结果且 PDF 未变则跳过。"""
+    job_text: str | None = None
+    if job_desc is not None:
+        if not job_desc.is_file():
+            typer.secho(f"找不到岗位说明：{job_desc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+        job_text = job_desc.read_text(encoding="utf-8")
+
+    try:
+        target = resolve_input_path(source)
+    except FileNotFoundError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    if target.is_dir():
+        try:
+            batch = run_resume_batch(
+                target,
+                job_description=job_text,
+                skip_questions=no_questions,
+                triage=triage,
+                force=force,
+                dpi=dpi,
+                progress=typer.echo,
+            )
+        except ResumeError as exc:
+            typer.secho(str(exc), err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1) from exc
+
+        typer.echo(f"批跑份数：{len(batch.rows)}")
+        if batch.summary_md is not None:
+            typer.echo(f"本地总表：{batch.summary_md}")
+        hard_n = sum(1 for row in batch.rows if row.exit_code == 1)
+        soft_n = sum(1 for row in batch.rows if row.exit_code == 2)
+        ok_n = sum(1 for row in batch.rows if row.exit_code == 0)
+        typer.echo(f"汇总：达标 {ok_n} · 未过合格线 {soft_n} · 硬失败 {hard_n}")
+        typer.echo("总表仅本机使用；不上门户、不在班级群点名。")
+        if batch.exit_code != 0:
+            raise typer.Exit(code=batch.exit_code)
+        typer.secho("批跑完成：各份排版与内容均达标。", fg=typer.colors.GREEN, bold=True)
+        return
+
+    try:
+        result = run_resume(
+            target,
+            job_description=job_text,
+            skip_questions=no_questions,
+            triage=triage,
+            force=force,
+            dpi=dpi,
+            progress=typer.echo,
+        )
+    except ResumeError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    _print_single_resume_result(result, triage=triage, no_questions=no_questions)
 

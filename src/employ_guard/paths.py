@@ -35,6 +35,22 @@ def resolve_input_file(source: Path, *, input_root: Path | None = None) -> Path:
     raise FileNotFoundError(f"找不到输入文件（已尝试：{detail}）")
 
 
+def resolve_input_path(source: Path, *, input_root: Path | None = None) -> Path:
+    """解析为已存在的文件或目录；相对路径再尝试默认输入目录。"""
+    if source.exists():
+        return source.resolve()
+
+    tried = [source]
+    if not source.is_absolute():
+        nested = (input_root or repo_root() / DEFAULT_INPUT_DIR) / source
+        tried.append(nested)
+        if nested.exists():
+            return nested.resolve()
+
+    detail = "；".join(str(path) for path in tried)
+    raise FileNotFoundError(f"找不到输入路径（已尝试：{detail}）")
+
+
 def output_run_dir(
     source: Path,
     *,
