@@ -15,7 +15,7 @@
 2. **听后做复盘**：转写现场录音 → 还原问答 → 面试评价（命令 `interview`）。
 3. **后续愿景**：知识库、模拟面试、真面试入库、企业查询（都是新工具，不作为本期必须交付）。
 
-当前里程碑是 **投前看简历**：书面标准见 [04-standard](./docs/04-standard/README.md)；各简历工具已可单独跑。当前推进老师命令 **`resume` 串跑**（R6 / [#32](https://github.com/IdEvEbI/employ-guard-ai/issues/32)）。
+当前里程碑是 **投前看简历 · 排查增强**：R1～R6 已可演示；听后做复盘暂缓。当前推进看板同步（[#34](https://github.com/IdEvEbI/employ-guard-ai/issues/34)）；合入后下一件为 R7（`--force` 与哈希跳过）。顺序见 [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) §5。
 
 当前**不做**：全员自助门户、代写简历、用分数替代老师分批、替代按日就业台账、默认使用云端语音识别、把课评「好课标准」用到简历与面试上、为两个动作各建一个仓库。
 
@@ -30,7 +30,7 @@
 5. 本仓 Cursor Rule：`.cursor/rules/employ-guard-ai.mdc`
 6. 新会话 Skill：`.cursor/skills/employ-guard-new-session/SKILL.md`（说「继续 / 开干」时优先按此阅读）
 
-老师用的命令：`employ-guard resume <简历.pdf>`（本期实现中）；`employ-guard interview <录音> [--resume <简历.pdf>]`（听后做复盘，后做）。各个工具见产品说明第 4 节。
+老师用的命令：`employ-guard resume <简历.pdf>`（已可用）；`employ-guard interview <录音> [--resume <简历.pdf>]`（听后做复盘，**暂缓**）。各个工具见产品说明第 4 节。
 
 **默认技术栈**：Python 3.12 命令行（uv）· 本机 mlx-whisper（转写）· DeepSeek API · Markdown 格式化（Prettier + prettier-plugin-zh + markdownlint）
 
