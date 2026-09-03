@@ -277,6 +277,21 @@ def test_full_pass_also_writes_brief(tmp_path: Path) -> None:
     assert "完整" in result.brief_path.read_text(encoding="utf-8")
 
 
+def test_progress_emits_start_and_finish(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "progress.pdf"
+    _write_pdf(pdf)
+    messages: list[str] = []
+    result = run_resume(pdf, root=tmp_path, progress=messages.append, **_inject())
+    assert result.exit_code == 0
+    assert any("正在 PDF 出图" in m for m in messages)
+    assert any("正在 查排版" in m for m in messages)
+    assert any("正在 判能不能投" in m for m in messages)
+    assert any("· 已跑 ·" in m and "ms" in m for m in messages)
+    assert all(s.elapsed_ms is not None for s in result.steps)
+    # 6 steps × (start + finish)
+    assert len(messages) == 12
+
+
 def test_cli_resume_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 't'\n", encoding="utf-8")

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -41,6 +43,23 @@ from employ_guard.pdf_to_images import (
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
 
 StepStatus = Literal["ran", "skipped", "failed", "disabled"]
+ProgressHook = Callable[[str], None]
+
+STEP_TOTAL = 6
+STEP_LABELS: dict[str, str] = {
+    "pdf-to-images": "PDF 出图",
+    "check-layout": "查排版",
+    "read-resume": "读简历",
+    "check-writing": "查文字表达",
+    "judge-resume": "判能不能投",
+    "draft-questions": "出练习题",
+}
+STATUS_LABELS: dict[str, str] = {
+    "ran": "已跑",
+    "skipped": "跳过",
+    "failed": "失败",
+    "disabled": "关闭",
+}
 
 
 def _sha256_file(path: Path) -> str:
@@ -81,6 +100,37 @@ class StepOutcome:
     status: StepStatus
     detail: str = ""
     path: Path | None = None
+    elapsed_ms: int | None = None
+
+
+class _StepClock:
+    """串跑步骤的开始 / 结束提示与耗时。"""
+
+    def __init__(self, progress: ProgressHook | None, *, total: int = STEP_TOTAL) -> None:
+        self._progress = progress
+        self.total = total
+        self.index = 0
+
+    def start(self, name: str) -> float:
+        self.index += 1
+        label = STEP_LABELS.get(name, name)
+        self._emit(f"[{self.index}/{self.total}] 正在 {label} …")
+        return time.perf_counter()
+
+    def finish(self, outcome: StepOutcome, started: float) -> StepOutcome:
+        elapsed_ms = max(0, int((time.perf_counter() - started) * 1000))
+        outcome.elapsed_ms = elapsed_ms
+        label = STEP_LABELS.get(outcome.name, outcome.name)
+        status = STATUS_LABELS.get(outcome.status, outcome.status)
+        suffix = f"：{outcome.detail}" if outcome.detail else ""
+        self._emit(
+            f"[{self.index}/{self.total}] {label} · {status} · {elapsed_ms} ms{suffix}"
+        )
+        return outcome
+
+    def _emit(self, message: str) -> None:
+        if self._progress is not None:
+            self._progress(message)
 
 
 @dataclass
@@ -270,6 +320,7 @@ def run_resume(
     force: bool = False,
     dpi: int = 200,
     root: Path | None = None,
+    progress: ProgressHook | None = None,
     visual_assessor: VisualAssessor | None = None,
     writing_assessor: WritingAssessor | None = None,
     content_assessor: ContentAssessor | None = None,
@@ -292,8 +343,13 @@ def run_resume(
     stem = pdf_path.stem
     current_sha = _sha256_file(pdf_path)
     result = ResumeRunResult(pdf_path=pdf_path, run_dir=run_dir, triage=triage)
+    clock = _StepClock(progress)
+
+    def _add(outcome: StepOutcome, started: float) -> None:
+        result.steps.append(clock.finish(outcome, started))
 
     # --- 1. pdf-to-images ---
+    t0 = clock.start("pdf-to-images")
     pages_dir = run_dir / "pages"
     existing_pages = _list_page_images(pages_dir) if pages_dir.is_dir() else []
     can_skip_images = (
@@ -301,22 +357,21 @@ def run_resume(
     )
     images_reran = False
     if can_skip_images:
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="pdf-to-images",
                 status="skipped",
                 detail=f"已有 {len(existing_pages)} 张页图（PDF 哈希一致）",
                 path=pages_dir,
-            )
+            ),
+            t0,
         )
     else:
         images_reran = True
         try:
             pages_dir = render_pdf_to_images(pdf_path, dpi=dpi, root=root)
         except PdfToImagesError as exc:
-            result.steps.append(
-                StepOutcome(name="pdf-to-images", status="failed", detail=str(exc))
-            )
+            _add(StepOutcome(name="pdf-to-images", status="failed", detail=str(exc)), t0)
             result.hard_error = str(exc)
             result.exit_code = 1
             return result
@@ -327,16 +382,18 @@ def run_resume(
             reason = f"PDF 已变更，重新写出 {count} 张页图"
         else:
             reason = f"写出 {count} 张页图"
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="pdf-to-images",
                 status="ran",
                 detail=reason,
                 path=pages_dir,
-            )
+            ),
+            t0,
         )
 
     # --- 2. check-layout ---
+    t0 = clock.start("check-layout")
     layout_json = run_dir / f"{stem}.layout.json"
     layout_sha = _json_sha256_field(layout_json)
     layout_hash_ok = (
@@ -354,20 +411,19 @@ def run_resume(
         try:
             layout_pass, layout_path = _load_layout_from_disk(run_dir, stem)
         except ResumeError as exc:
-            result.steps.append(
-                StepOutcome(name="check-layout", status="failed", detail=str(exc))
-            )
+            _add(StepOutcome(name="check-layout", status="failed", detail=str(exc)), t0)
             result.hard_error = str(exc)
             result.exit_code = 1
             return result
         result.layout_pass = layout_pass
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="check-layout",
                 status="skipped",
                 detail="排版达标" if layout_pass else "排版未达标（沿用已有报告）",
                 path=layout_path,
-            )
+            ),
+            t0,
         )
     else:
         had_layout = layout_json.is_file()
@@ -378,9 +434,7 @@ def run_resume(
                 visual_assessor=visual_assessor,
             )
         except CheckLayoutError as exc:
-            result.steps.append(
-                StepOutcome(name="check-layout", status="failed", detail=str(exc))
-            )
+            _add(StepOutcome(name="check-layout", status="failed", detail=str(exc)), t0)
             result.hard_error = str(exc)
             result.exit_code = 1
             return result
@@ -390,16 +444,18 @@ def run_resume(
             detail = f"强制重跑，{detail}"
         elif had_layout:
             detail = f"PDF 已变更，重新查排版（{detail}）"
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="check-layout",
                 status="ran",
                 detail=detail,
                 path=layout.report_md,
-            )
+            ),
+            t0,
         )
 
     # --- 3. read-resume ---
+    t0 = clock.start("read-resume")
     resume_md = run_dir / f"{stem}.resume.md"
     can_skip_read = (
         not force
@@ -408,13 +464,14 @@ def run_resume(
     )
     text_reran = False
     if can_skip_read:
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="read-resume",
                 status="skipped",
                 detail="已有抽出文本（PDF 哈希一致）",
                 path=resume_md,
-            )
+            ),
+            t0,
         )
     else:
         text_reran = True
@@ -422,9 +479,7 @@ def run_resume(
         try:
             extract_resume_text(pdf_path, root=root)
         except ReadResumeError as exc:
-            result.steps.append(
-                StepOutcome(name="read-resume", status="failed", detail=str(exc))
-            )
+            _add(StepOutcome(name="read-resume", status="failed", detail=str(exc)), t0)
             result.hard_error = str(exc)
             result.exit_code = 1
             return result
@@ -434,24 +489,27 @@ def run_resume(
             detail = "PDF 已变更，重新抽出文本"
         else:
             detail = "已抽出文本"
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="read-resume",
                 status="ran",
                 detail=detail,
                 path=resume_md,
-            )
+            ),
+            t0,
         )
 
     # --- 4. check-writing ---
+    t0 = clock.start("check-writing")
     writing_json = run_dir / f"{stem}.writing.json"
     if skip_writing:
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="check-writing",
                 status="disabled",
                 detail="排查模式未查文字表达",
-            )
+            ),
+            t0,
         )
     else:
         can_skip_writing = (
@@ -464,20 +522,22 @@ def run_resume(
             try:
                 writing_pass, writing_path = _load_writing_from_disk(run_dir, stem)
             except ResumeError as exc:
-                result.steps.append(
-                    StepOutcome(name="check-writing", status="failed", detail=str(exc))
+                _add(
+                    StepOutcome(name="check-writing", status="failed", detail=str(exc)),
+                    t0,
                 )
                 result.hard_error = str(exc)
                 result.exit_code = 1
                 return result
             result.writing_pass = writing_pass
-            result.steps.append(
+            _add(
                 StepOutcome(
                     name="check-writing",
                     status="skipped",
                     detail="文字表达无明显问题" if writing_pass else "有待改进项（沿用已有报告）",
                     path=writing_path,
-                )
+                ),
+                t0,
             )
         else:
             had_writing = writing_json.is_file()
@@ -488,8 +548,9 @@ def run_resume(
                     writing_assessor=writing_assessor,
                 )
             except CheckWritingError as exc:
-                result.steps.append(
-                    StepOutcome(name="check-writing", status="failed", detail=str(exc))
+                _add(
+                    StepOutcome(name="check-writing", status="failed", detail=str(exc)),
+                    t0,
                 )
                 result.hard_error = str(exc)
                 result.exit_code = 1
@@ -506,16 +567,18 @@ def run_resume(
                 detail = f"PDF 已变更，重新查文字表达（{base}）"
             else:
                 detail = base
-            result.steps.append(
+            _add(
                 StepOutcome(
                     name="check-writing",
                     status="ran",
                     detail=detail,
                     path=writing.report_md,
-                )
+                ),
+                t0,
             )
 
     # --- 5. judge-resume ---
+    t0 = clock.start("judge-resume")
     judge_json = run_dir / f"{stem}.judge.json"
     can_skip_judge = (
         not force
@@ -527,20 +590,19 @@ def run_resume(
         try:
             content_pass, judge_path = _load_judge_from_disk(run_dir, stem)
         except ResumeError as exc:
-            result.steps.append(
-                StepOutcome(name="judge-resume", status="failed", detail=str(exc))
-            )
+            _add(StepOutcome(name="judge-resume", status="failed", detail=str(exc)), t0)
             result.hard_error = str(exc)
             result.exit_code = 1
             return result
         result.content_pass = content_pass
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="judge-resume",
                 status="skipped",
                 detail="内容达标" if content_pass else "内容未达标（沿用已有报告）",
                 path=judge_path,
-            )
+            ),
+            t0,
         )
     else:
         had_judge = judge_json.is_file()
@@ -552,9 +614,7 @@ def run_resume(
                 content_assessor=content_assessor,
             )
         except JudgeResumeError as exc:
-            result.steps.append(
-                StepOutcome(name="judge-resume", status="failed", detail=str(exc))
-            )
+            _add(StepOutcome(name="judge-resume", status="failed", detail=str(exc)), t0)
             result.hard_error = str(exc)
             result.exit_code = 1
             return result
@@ -566,28 +626,31 @@ def run_resume(
             detail = f"PDF 已变更，重新判断（{base}）"
         else:
             detail = base
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="judge-resume",
                 status="ran",
                 detail=detail,
                 path=judged.report_md,
-            )
+            ),
+            t0,
         )
 
     # --- 6. draft-questions（可关）---
+    t0 = clock.start("draft-questions")
     if skip_questions:
         detail = (
             "排查模式未出练习题"
             if triage
             else "已按选项跳过出练习题"
         )
-        result.steps.append(
+        _add(
             StepOutcome(
                 name="draft-questions",
                 status="disabled",
                 detail=detail,
-            )
+            ),
+            t0,
         )
     else:
         questions_json = run_dir / f"{stem}.questions.json"
@@ -601,20 +664,22 @@ def run_resume(
             try:
                 count, questions_path = _load_questions_from_disk(run_dir, stem)
             except ResumeError as exc:
-                result.steps.append(
-                    StepOutcome(name="draft-questions", status="failed", detail=str(exc))
+                _add(
+                    StepOutcome(name="draft-questions", status="failed", detail=str(exc)),
+                    t0,
                 )
                 result.hard_error = str(exc)
                 result.exit_code = 1
                 return result
             result.questions_count = count
-            result.steps.append(
+            _add(
                 StepOutcome(
                     name="draft-questions",
                     status="skipped",
                     detail=f"已有 {count} 道练习题（PDF 哈希一致）",
                     path=questions_path,
-                )
+                ),
+                t0,
             )
         else:
             had_questions = questions_json.is_file()
@@ -626,8 +691,9 @@ def run_resume(
                     questions_assessor=questions_assessor,
                 )
             except DraftQuestionsError as exc:
-                result.steps.append(
-                    StepOutcome(name="draft-questions", status="failed", detail=str(exc))
+                _add(
+                    StepOutcome(name="draft-questions", status="failed", detail=str(exc)),
+                    t0,
                 )
                 result.hard_error = str(exc)
                 result.exit_code = 1
@@ -640,13 +706,14 @@ def run_resume(
                 detail = f"PDF 已变更，重新出题（{base}）"
             else:
                 detail = base
-            result.steps.append(
+            _add(
                 StepOutcome(
                     name="draft-questions",
                     status="ran",
                     detail=detail,
                     path=questions.report_md,
-                )
+                ),
+                t0,
             )
 
     layout_fail = result.layout_pass is False
