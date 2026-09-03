@@ -296,6 +296,11 @@ def resume_cmd(
         "--no-questions",
         help="关掉出练习题这一步。",
     ),
+    triage: bool = typer.Option(
+        False,
+        "--triage",
+        help="排查模式：关掉出练习题与查文字表达，并写出短教练摘要。",
+    ),
     force: bool = typer.Option(
         False,
         "--force",
@@ -316,6 +321,7 @@ def resume_cmd(
             pdf,
             job_description=job_text,
             skip_questions=no_questions,
+            triage=triage,
             force=force,
             dpi=dpi,
         )
@@ -324,21 +330,25 @@ def resume_cmd(
         raise typer.Exit(code=1) from exc
 
     typer.echo(f"运行目录：{result.run_dir}")
-    typer.echo("步骤：")
-    for step in result.steps:
-        status_label = {
-            "ran": "已跑",
-            "skipped": "跳过",
-            "failed": "失败",
-            "disabled": "关闭",
-        }.get(step.status, step.status)
-        line = f"  - {step.name}（{status_label}）"
-        if step.detail:
-            line += f"：{step.detail}"
-        if step.status == "failed":
-            typer.secho(line, err=True, fg=typer.colors.RED)
-        else:
-            typer.echo(line)
+    if result.brief_path is not None:
+        typer.echo(f"教练摘要：{result.brief_path}")
+
+    if not triage:
+        typer.echo("步骤：")
+        for step in result.steps:
+            status_label = {
+                "ran": "已跑",
+                "skipped": "跳过",
+                "failed": "失败",
+                "disabled": "关闭",
+            }.get(step.status, step.status)
+            line = f"  - {step.name}（{status_label}）"
+            if step.detail:
+                line += f"：{step.detail}"
+            if step.status == "failed":
+                typer.secho(line, err=True, fg=typer.colors.RED)
+            else:
+                typer.echo(line)
 
     if result.hard_error:
         typer.secho(
@@ -357,7 +367,9 @@ def resume_cmd(
     else:
         typer.echo("  排版：未得到结论")
 
-    if result.writing_pass is True:
+    if triage:
+        typer.echo("  文字表达：排查模式未查")
+    elif result.writing_pass is True:
         typer.secho("  文字表达：无明显问题", fg=typer.colors.GREEN)
     elif result.writing_pass is False:
         typer.secho("  文字表达：有待改进（不自动等同不能投）", fg=typer.colors.YELLOW)
@@ -371,12 +383,17 @@ def resume_cmd(
     else:
         typer.echo("  内容：未得到结论")
 
-    if no_questions:
-        typer.echo("  练习题：已关闭")
+    if triage or no_questions:
+        typer.echo("  练习题：已关闭" + ("（排查模式）" if triage else ""))
     elif result.questions_count is not None:
         typer.echo(f"  练习题：{result.questions_count} 道（推测，供练习）")
     else:
         typer.echo("  练习题：未写出")
+
+    if result.actions:
+        typer.echo("建议先改（最多 3 条）：")
+        for tip in result.actions:
+            typer.echo(f"  - {tip}")
 
     if result.exit_code == 2:
         typer.secho(
@@ -387,5 +404,9 @@ def resume_cmd(
         )
         raise typer.Exit(code=2)
 
-    typer.secho("结论：排版与内容均达标（文字表达问题不自动否决投递）。", fg=typer.colors.GREEN, bold=True)
+    typer.secho(
+        "结论：排版与内容均达标（文字表达问题不自动否决投递）。",
+        fg=typer.colors.GREEN,
+        bold=True,
+    )
 
