@@ -16,6 +16,7 @@ def test_help_exits_zero() -> None:
     assert "check-layout" in result.stdout
     assert "check-writing" in result.stdout
     assert "judge-resume" in result.stdout
+    assert "draft-questions" in result.stdout
 
 
 def test_version() -> None:

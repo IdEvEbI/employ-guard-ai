@@ -12,7 +12,7 @@
 
 请阅读 [02-architecture/README.md](./02-architecture/README.md)。
 
-评价标准从哪里来，见 [上游标准引用](./02-architecture/001_upstream-standards_上游标准引用.md)。就业投递向标准见 [04-standard](./04-standard/README.md)（含 JD 扫描、简历书写标准、简历合格线）。查排版见 [002](./02-architecture/002_check-layout_查排版技术说明.md)；判能不能投见 [003](./02-architecture/003_judge-resume_判能不能投技术说明.md)；查文字表达见 [004](./02-architecture/004_check-writing_查文字表达技术说明.md)。
+评价标准从哪里来，见 [上游标准引用](./02-architecture/001_upstream-standards_上游标准引用.md)。就业投递向标准见 [04-standard](./04-standard/README.md)（含 JD 扫描、简历书写标准、简历合格线）。查排版见 [002](./02-architecture/002_check-layout_查排版技术说明.md)；判能不能投见 [003](./02-architecture/003_judge-resume_判能不能投技术说明.md)；查文字表达见 [004](./02-architecture/004_check-writing_查文字表达技术说明.md)；出练习题见 [005](./02-architecture/005_draft-questions_出练习题技术说明.md)。
 
 ## 3. 标准（合格线与 JD）
 

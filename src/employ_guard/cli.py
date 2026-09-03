@@ -11,6 +11,7 @@ import typer
 from employ_guard import __version__
 from employ_guard.check_layout import CheckLayoutError, check_layout
 from employ_guard.check_writing import CheckWritingError, check_writing
+from employ_guard.draft_questions import DraftQuestionsError, draft_questions
 from employ_guard.judge_resume import JudgeResumeError, judge_resume
 from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
@@ -243,3 +244,40 @@ def judge_resume_cmd(
         for note in result.main_blockers:
             typer.echo(f"  - {note}", err=True)
     raise typer.Exit(code=2)
+
+
+@app.command("draft-questions")
+def draft_questions_cmd(
+    source: Path = typer.Argument(
+        ...,
+        help="PDF（须已 read-resume）或 *.resume.md / 文本文件。",
+    ),
+    job_desc: Path | None = typer.Option(
+        None,
+        "--job-desc",
+        help="可选：目标岗位说明文本文件。",
+    ),
+) -> None:
+    """根据简历文本出练习题。本步不判能不能投，不评排版。"""
+    job_text: str | None = None
+    if job_desc is not None:
+        if not job_desc.is_file():
+            typer.secho(f"找不到岗位说明：{job_desc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+        job_text = job_desc.read_text(encoding="utf-8")
+
+    try:
+        result = draft_questions(source, job_description=job_text)
+    except DraftQuestionsError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"已写出练习题：{result.report_md}")
+    typer.echo("本步只出练习题（推测），不判能不能投，不评排版。")
+    typer.echo(f"范围：{result.scope}")
+    typer.echo(f"共 {len(result.questions)} 道题（详见报告）。")
+    for item in result.questions[:5]:
+        typer.echo(f"  - {item.get('id')}（{item.get('category')}）：{item.get('question')}")
+    if len(result.questions) > 5:
+        typer.echo(f"  … 另有 {len(result.questions) - 5} 道，见报告。")
+
