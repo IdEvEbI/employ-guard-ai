@@ -324,6 +324,7 @@ def resume_cmd(
             triage=triage,
             force=force,
             dpi=dpi,
+            progress=typer.echo,
         )
     except ResumeError as exc:
         typer.secho(str(exc), err=True, fg=typer.colors.RED)
@@ -343,6 +344,8 @@ def resume_cmd(
                 "disabled": "关闭",
             }.get(step.status, step.status)
             line = f"  - {step.name}（{status_label}）"
+            if step.elapsed_ms is not None:
+                line += f" · {step.elapsed_ms} ms"
             if step.detail:
                 line += f"：{step.detail}"
             if step.status == "failed":
