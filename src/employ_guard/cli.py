@@ -15,6 +15,7 @@ from employ_guard.draft_questions import DraftQuestionsError, draft_questions
 from employ_guard.judge_resume import JudgeResumeError, judge_resume
 from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
+from employ_guard.resume import ResumeError, run_resume
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -280,4 +281,105 @@ def draft_questions_cmd(
         typer.echo(f"  - {item.get('id')}（{item.get('category')}）：{item.get('question')}")
     if len(result.questions) > 5:
         typer.echo(f"  … 另有 {len(result.questions) - 5} 道，见报告。")
+
+
+@app.command("resume")
+def resume_cmd(
+    pdf: Path = typer.Argument(..., help="投递用 PDF。本期只接受 PDF。"),
+    job_desc: Path | None = typer.Option(
+        None,
+        "--job-desc",
+        help="可选：目标岗位说明文本文件（传给判能不能投与出练习题）。",
+    ),
+    no_questions: bool = typer.Option(
+        False,
+        "--no-questions",
+        help="关掉出练习题这一步。",
+    ),
+    dpi: int = typer.Option(200, "--dpi", help="出图分辨率，默认 200。"),
+) -> None:
+    """投前看简历：按顺序调用各工具；已有结果文件则跳过。"""
+    job_text: str | None = None
+    if job_desc is not None:
+        if not job_desc.is_file():
+            typer.secho(f"找不到岗位说明：{job_desc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+        job_text = job_desc.read_text(encoding="utf-8")
+
+    try:
+        result = run_resume(
+            pdf,
+            job_description=job_text,
+            skip_questions=no_questions,
+            dpi=dpi,
+        )
+    except ResumeError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"运行目录：{result.run_dir}")
+    typer.echo("步骤：")
+    for step in result.steps:
+        status_label = {
+            "ran": "已跑",
+            "skipped": "跳过",
+            "failed": "失败",
+            "disabled": "关闭",
+        }.get(step.status, step.status)
+        line = f"  - {step.name}（{status_label}）"
+        if step.detail:
+            line += f"：{step.detail}"
+        if step.status == "failed":
+            typer.secho(line, err=True, fg=typer.colors.RED)
+        else:
+            typer.echo(line)
+
+    if result.hard_error:
+        typer.secho(
+            "硬失败（出图 / 读文本或工具错误）。不得据此写成内容不能投或排版不合格。",
+            err=True,
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(code=result.exit_code)
+
+    typer.echo("摘要：")
+    if result.layout_pass is True:
+        typer.secho("  排版：达标", fg=typer.colors.GREEN)
+    elif result.layout_pass is False:
+        typer.secho("  排版：未达标", fg=typer.colors.RED)
+    else:
+        typer.echo("  排版：未得到结论")
+
+    if result.writing_pass is True:
+        typer.secho("  文字表达：无明显问题", fg=typer.colors.GREEN)
+    elif result.writing_pass is False:
+        typer.secho("  文字表达：有待改进（不自动等同不能投）", fg=typer.colors.YELLOW)
+    else:
+        typer.echo("  文字表达：未得到结论")
+
+    if result.content_pass is True:
+        typer.secho("  内容：达标", fg=typer.colors.GREEN)
+    elif result.content_pass is False:
+        typer.secho("  内容：未达标", fg=typer.colors.RED)
+    else:
+        typer.echo("  内容：未得到结论")
+
+    if no_questions:
+        typer.echo("  练习题：已关闭")
+    elif result.questions_count is not None:
+        typer.echo(f"  练习题：{result.questions_count} 道（推测，供练习）")
+    else:
+        typer.echo("  练习题：未写出")
+
+    if result.exit_code == 2:
+        typer.secho(
+            "结论：排版或内容未过合格线。请先改对应报告中的未过项后再投。",
+            err=True,
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(code=2)
+
+    typer.secho("结论：排版与内容均达标（文字表达问题不自动否决投递）。", fg=typer.colors.GREEN, bold=True)
 

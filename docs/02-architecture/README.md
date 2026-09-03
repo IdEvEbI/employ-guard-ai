@@ -9,5 +9,6 @@
 | [003 判能不能投技术说明](./003_judge-resume_判能不能投技术说明.md)  | `judge-resume`：LLM + 004 §2           |
 | [004 查文字表达技术说明](./004_check-writing_查文字表达技术说明.md) | `check-writing`：规则 + LLM + 003 §3.5 |
 | [005 出练习题技术说明](./005_draft-questions_出练习题技术说明.md)   | `draft-questions`：LLM + 产品 §4.6     |
+| [006 投前看简历技术说明](./006_resume_投前看简历技术说明.md)        | `resume`：按顺序调用并跳过已有文件     |
 
 简历合格线、JD 扫描与简历书写标准见 [04-standard](../04-standard/README.md)。
