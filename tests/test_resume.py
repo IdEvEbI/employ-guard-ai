@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pymupdf
@@ -177,6 +178,41 @@ def test_skip_existing_artifacts(tmp_path: Path) -> None:
     assert second.layout_pass is True
     assert second.content_pass is True
     assert second.questions_count == 1
+
+
+def test_force_reruns_even_when_hash_matches(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "force.pdf"
+    _write_pdf(pdf)
+    first = run_resume(pdf, root=tmp_path, **_inject())
+    assert all(s.status == "ran" for s in first.steps)
+
+    second = run_resume(pdf, root=tmp_path, force=True, **_inject())
+    assert second.exit_code == 0
+    assert all(s.status == "ran" for s in second.steps)
+    assert any("强制重跑" in (s.detail or "") for s in second.steps)
+
+
+def test_pdf_change_invalidates_skip(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "changed.pdf"
+    _write_pdf(pdf, "version-one")
+    first = run_resume(pdf, root=tmp_path, **_inject())
+    assert all(s.status == "ran" for s in first.steps)
+    from employ_guard.resume import _sha256_file
+
+    old_sha = _sha256_file(pdf)
+
+    _write_pdf(pdf, "version-two-changed-content")
+    new_sha = _sha256_file(pdf)
+    assert old_sha != new_sha
+
+    second = run_resume(pdf, root=tmp_path, **_inject())
+    assert second.exit_code == 0
+    assert all(s.status == "ran" for s in second.steps)
+    assert any("PDF 已变更" in (s.detail or "") for s in second.steps)
+    resume_json = json.loads(
+        (second.run_dir / "changed.resume.json").read_text(encoding="utf-8")
+    )
+    assert resume_json["sha256"] == new_sha
 
 
 def test_no_questions_flag(tmp_path: Path) -> None:
