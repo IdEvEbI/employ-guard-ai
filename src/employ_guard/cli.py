@@ -10,6 +10,7 @@ import typer
 
 from employ_guard import __version__
 from employ_guard.check_layout import CheckLayoutError, check_layout
+from employ_guard.judge_resume import JudgeResumeError, judge_resume
 from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
 
@@ -118,4 +119,63 @@ def check_layout_cmd(
         typer.echo("相关细项缺陷：", err=True)
         for item in found_defects:
             typer.echo(f"  - {item.get('code')}: {item.get('note') or '见报告'}", err=True)
+    raise typer.Exit(code=2)
+
+
+@app.command("judge-resume")
+def judge_resume_cmd(
+    source: Path = typer.Argument(
+        ...,
+        help="PDF（须已 read-resume）或 *.resume.md / 文本文件。",
+    ),
+    job_desc: Path | None = typer.Option(
+        None,
+        "--job-desc",
+        help="可选：目标岗位说明文本文件。",
+    ),
+) -> None:
+    """判内容能不能投。本步不评价排版，不出练习题。"""
+    job_text: str | None = None
+    if job_desc is not None:
+        if not job_desc.is_file():
+            typer.secho(f"找不到岗位说明：{job_desc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+        job_text = job_desc.read_text(encoding="utf-8")
+
+    try:
+        result = judge_resume(source, job_description=job_text)
+    except JudgeResumeError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"已写出内容报告：{result.report_md}")
+    typer.echo("本步只判内容能不能投，不评价排版，不出练习题。")
+
+    failed = [item for item in result.pass_line if not item.get("pass")]
+
+    if result.content_pass:
+        typer.secho(
+            f"结论：内容达标（{result.scope}）。",
+            fg=typer.colors.GREEN,
+            bold=True,
+        )
+        if result.doubtful_items:
+            typer.echo("存疑项（老师复核，不自动等同未合格）：")
+            for note in result.doubtful_items:
+                typer.echo(f"  - {note}")
+        return
+
+    typer.secho(
+        "结论：内容未达标。请先改合格线未过项后再投。",
+        fg=typer.colors.RED,
+        bold=True,
+        err=True,
+    )
+    typer.secho("未过项：", fg=typer.colors.RED, err=True)
+    for item in failed:
+        typer.secho(f"  - {item['id']}: {item.get('note', '')}", fg=typer.colors.RED, err=True)
+    if result.main_blockers:
+        typer.echo("主要卡点：", err=True)
+        for note in result.main_blockers:
+            typer.echo(f"  - {note}", err=True)
     raise typer.Exit(code=2)

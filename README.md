@@ -59,9 +59,12 @@ uv run employ-guard check
 uv run employ-guard pdf-to-images <简历.pdf>
 uv run employ-guard check-layout <简历.pdf>
 uv run employ-guard read-resume <简历.pdf>
+uv run employ-guard judge-resume <简历.pdf>
 ```
 
-`pdf-to-images` 把投递用 PDF 按页写成 `data/output/.../pages/`（本步不评价排版）。`check-layout` 只凭页图对照 [004](./docs/04-standard/004_resume-bar_简历合格线.md) 查排版（须先出图；技术说明见 [002](./docs/02-architecture/002_check-layout_查排版技术说明.md)）。`read-resume` 抽出文本（去掉版面空格；页码只在 JSON；本步不判断能不能投）。真实简历放在 `data/input/`，不要提交。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
+`pdf-to-images` 把投递用 PDF 按页写成 `data/output/.../pages/`（本步不评价排版）。`check-layout` 只凭页图对照 [004 §3](./docs/04-standard/004_resume-bar_简历合格线.md) 查排版（须先出图；[002](./docs/02-architecture/002_check-layout_查排版技术说明.md)）。`read-resume` 抽出文本（本步不判断能不能投）。`judge-resume` 只凭文本对照 [004 §2](./docs/04-standard/004_resume-bar_简历合格线.md) 判能不能投（须先 read-resume；[003](./docs/02-architecture/003_judge-resume_判能不能投技术说明.md)）。
+
+真实简历放在 `data/input/`，不要提交。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
 
 ---
 
