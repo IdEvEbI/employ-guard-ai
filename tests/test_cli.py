@@ -14,6 +14,7 @@ def test_help_exits_zero() -> None:
     assert "pdf-to-images" in result.stdout
     assert "read-resume" in result.stdout
     assert "check-layout" in result.stdout
+    assert "check-writing" in result.stdout
     assert "judge-resume" in result.stdout
 
 

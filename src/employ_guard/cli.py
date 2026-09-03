@@ -10,6 +10,7 @@ import typer
 
 from employ_guard import __version__
 from employ_guard.check_layout import CheckLayoutError, check_layout
+from employ_guard.check_writing import CheckWritingError, check_writing
 from employ_guard.judge_resume import JudgeResumeError, judge_resume
 from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
@@ -104,6 +105,10 @@ def check_layout_cmd(
             typer.echo("仍有细项可改（未构成合格线未过）：")
             for item in found_defects:
                 typer.echo(f"  - {item.get('code')}: {item.get('note') or '见报告'}")
+        if result.revision_tips:
+            typer.echo("改稿 / 人工复核提示：")
+            for tip in result.revision_tips:
+                typer.echo(f"  - {tip}")
         return
 
     typer.secho(
@@ -119,7 +124,50 @@ def check_layout_cmd(
         typer.echo("相关细项缺陷：", err=True)
         for item in found_defects:
             typer.echo(f"  - {item.get('code')}: {item.get('note') or '见报告'}", err=True)
+    if result.revision_tips:
+        typer.echo("改稿要点：", err=True)
+        for tip in result.revision_tips:
+            typer.echo(f"  - {tip}", err=True)
     raise typer.Exit(code=2)
+
+
+@app.command("check-writing")
+def check_writing_cmd(
+    source: Path = typer.Argument(
+        ...,
+        help="PDF（须已 read-resume）或 *.resume.md / 文本文件。",
+    ),
+) -> None:
+    """查文字表达。本步不判能不能投，不评价排版。"""
+    try:
+        result = check_writing(source)
+    except CheckWritingError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"已写出文字表达报告：{result.report_md}")
+    typer.echo("本步只查文字表达，不判能不能投，不评价排版。")
+
+    if result.writing_pass:
+        typer.secho("结论：文字表达未发现明显问题。", fg=typer.colors.GREEN, bold=True)
+        return
+
+    typer.secho("结论：有待改进的文字表达项（不自动等同「不能投」）。", fg=typer.colors.YELLOW, bold=True)
+    by_id: dict[str, list[dict[str, object]]] = {}
+    for item in result.findings:
+        code = str(item.get("id") or "?")
+        by_id.setdefault(code, []).append(item)
+    for code in ("W1", "W2", "W3", "W4"):
+        items = by_id.get(code) or []
+        if not items:
+            continue
+        typer.echo(f"{code}（{len(items)} 项）：")
+        for item in items[:5]:
+            line_no = item.get("line")
+            prefix = f"  第 {line_no} 行" if line_no else "  "
+            typer.echo(f"{prefix}：{item.get('note') or item.get('excerpt')}")
+        if len(items) > 5:
+            typer.echo(f"  … 另有 {len(items) - 5} 项，见报告。")
 
 
 @app.command("judge-resume")
@@ -163,6 +211,22 @@ def judge_resume_cmd(
             typer.echo("存疑项（老师复核，不自动等同未合格）：")
             for note in result.doubtful_items:
                 typer.echo(f"  - {note}")
+        if result.level_line:
+            high = [i["id"] for i in result.level_line if i.get("level") == "high"]
+            mid = [i["id"] for i in result.level_line if i.get("level") == "mid"]
+            low = [i["id"] for i in result.level_line if i.get("level") == "low"]
+            parts = []
+            if high:
+                parts.append(f"高 {', '.join(high)}")
+            if mid:
+                parts.append(f"中 {', '.join(mid)}")
+            if low:
+                parts.append(f"低 {', '.join(low)}")
+            if parts:
+                typer.echo("水平线：" + "；".join(parts) + "。")
+            weak = mid + low
+            if weak:
+                typer.echo("偏弱项：" + "、".join(weak) + "（详见报告水平线）。")
         return
 
     typer.secho(

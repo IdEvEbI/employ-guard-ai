@@ -11,8 +11,12 @@ from typer.testing import CliRunner
 
 from employ_guard.cli import app
 from employ_guard.llm import LLMError
+from datetime import date
+
 from employ_guard.judge_resume import (
     JudgeResumeError,
+    _clean_note,
+    find_future_end_dates,
     _parse_json_object,
     default_content_assessor,
     judge_resume,
@@ -38,8 +42,9 @@ def _pass_assessor(_text: str, _job: str | None) -> dict:
     ]
     pass_line[6]["doubtful"] = True
     pass_line[6]["note"] = "年龄与工龄互算略紧，存疑"
+    levels = ["high", "mid", "low", "high", "mid", "high", "mid", "low"]
     level_line = [
-        {"id": f"H{i}", "signal": i % 2 == 1, "note": f"H{i} 信号", "method": "llm"}
+        {"id": f"H{i}", "level": levels[i - 1], "note": f"H{i} 说明", "method": "llm"}
         for i in range(1, 9)
     ]
     return {
@@ -89,7 +94,7 @@ def test_default_assessor_retries_without_json_mode(monkeypatch: pytest.MonkeyPa
             {
                 "scope": "test",
                 "pass_line": [{"id": "C1", "pass": True, "doubtful": False, "note": "ok"}],
-                "level_line": [{"id": "H1", "signal": True, "note": "ok"}],
+                "level_line": [{"id": "H1", "level": "high", "note": "ok"}],
                 "main_blockers": [],
             }
         )
@@ -115,6 +120,161 @@ def test_requires_read_resume_first(tmp_path: Path) -> None:
         judge_resume(pdf, root=tmp_path, content_assessor=_pass_assessor)
 
 
+def test_clean_note_strips_field_assignments() -> None:
+    raw = "有量化结果，但耗时过短，面试难辩护，故doubtful=true"
+    cleaned = _clean_note(raw)
+    assert "doubtful" not in cleaned.lower()
+    assert "耗时过短" in cleaned
+    assert cleaned.endswith("。")
+
+
+def test_refine_level_caps_before_style_resume() -> None:
+    from employ_guard.judge_resume import refine_level_line
+
+    text = (
+        "求职意向：大模型算法工程师\n"
+        "2025.08-2026.08 某公司 大模型后端研发工程师\n"
+        "1.多 Agent 编排与状态管理：基于 LangGraph\n"
+        "2.四维度并发审查：asyncio\n"
+        "单份合同审查耗时 <3s\n"
+    )
+    pass_line = [
+        {"id": f"C{i}", "pass": True, "doubtful": i == 6, "note": "x", "method": "llm"}
+        for i in range(1, 10)
+    ]
+    level_line = [
+        {"id": f"H{i}", "level": "high", "note": "模型给高", "method": "llm"}
+        for i in range(1, 9)
+    ]
+    refined = refine_level_line(level_line, text, pass_line)
+    by_id = {item["id"]: item for item in refined}
+    assert by_id["H1"]["level"] == "mid"
+    assert by_id["H4"]["level"] == "mid"
+    assert by_id["H5"]["level"] == "mid"
+    assert by_id["H8"]["level"] == "mid"
+    assert by_id["H2"]["level"] == "high"
+
+
+def test_refine_level_keeps_after_style_highs() -> None:
+    from employ_guard.judge_resume import refine_level_line
+
+    text = (
+        "求职意向：AI应用开发工程师|大模型算法工程师\n"
+        "2024.09---至今 某公司 大模型应用开发工程师\n"
+        "律所律师三类使用入口上传合同\n"
+        "发现问题 → 查找依据 → 生成方案\n"
+        "主修课程：高等数学\n"
+        "自我评价\n拥有三年经验\n"
+        "单份合同审查耗时 40-60s\n"
+    )
+    pass_line = [
+        {"id": f"C{i}", "pass": True, "doubtful": False, "note": "x", "method": "llm"}
+        for i in range(1, 10)
+    ]
+    level_line = [
+        {"id": f"H{i}", "level": "high", "note": "模型给高", "method": "llm"}
+        for i in range(1, 9)
+    ]
+    refined = refine_level_line(level_line, text, pass_line)
+    by_id = {item["id"]: item for item in refined}
+    assert by_id["H1"]["level"] == "high"
+    assert by_id["H5"]["level"] == "high"
+    assert by_id["H8"]["level"] == "high"
+    assert by_id["H6"]["level"] == "mid"
+
+
+def test_refine_level_caps_encyclopedia_resume() -> None:
+    from employ_guard.judge_resume import refine_level_line
+
+    duties = "\n".join(f"{i}.负责实现某模块并完成部署与监控配置细节说明。" for i in range(1, 15))
+    text = (
+        "个人优势\n"
+        "Java 微服务生态方面，熟悉 Spring Boot / Spring Cloud。\n"
+        "前端开发方面，熟练掌握 HTML5、Vue.js。\n"
+        "同时深耕大模型应用开发，使用 LangChain。\n"
+        "相关技能\n"
+        "项目经历\n"
+        f"{duties}\n"
+    )
+    # pad length
+    text = text + ("补充说明技术细节。" * 400)
+    pass_line = [
+        {"id": f"C{i}", "pass": True, "doubtful": False, "note": "x", "method": "llm"}
+        for i in range(1, 10)
+    ]
+    level_line = [
+        {"id": f"H{i}", "level": "high", "note": "模型给高", "method": "llm"}
+        for i in range(1, 9)
+    ]
+    refined = refine_level_line(level_line, text, pass_line)
+    by_id = {item["id"]: item for item in refined}
+    assert by_id["H1"]["level"] == "mid"
+    assert by_id["H5"]["level"] == "mid"
+    assert by_id["H6"]["level"] == "mid"
+
+
+def test_find_future_end_dates() -> None:
+    text = (
+        "2023.09-2025.07 甲公司\n"
+        "2025.08-2027.06 乙公司\n"
+        "2024.09---至今 丙公司\n"
+        "项目 2025.12 - 2027.03"
+    )
+    hits = find_future_end_dates(text, today=date(2026, 9, 3))
+    assert any("2027.06" in item for item in hits)
+    assert any("2027.03" in item for item in hits)
+    assert not any("至今" in item for item in hits)
+    assert not any("2025.07" in item for item in hits)
+
+
+def test_apply_future_date_doubts_marks_c7(tmp_path: Path) -> None:
+    md = tmp_path / "demo.resume.md"
+    md.write_text("2025.08-2027.06 大模型后端\n", encoding="utf-8")
+    result = judge_resume(
+        md,
+        root=tmp_path,
+        content_assessor=_pass_assessor,
+        today=date(2026, 9, 3),
+    )
+    c7 = next(item for item in result.pass_line if item["id"] == "C7")
+    assert c7["pass"] is True
+    assert c7["doubtful"] is True
+    assert "晚于当日" in c7["note"]
+    assert any("C7" in item for item in result.doubtful_items)
+
+
+def test_apply_credibility_doubts_tu_style(tmp_path: Path) -> None:
+    from employ_guard.judge_resume import find_credibility_issues
+
+    text = (
+        "项目一：金融研报生成系统 项目负责人\n"
+        "基于 Qwen3.5-4B 的 lora 微调生成研报\n"
+        "项目二：智慧健康管家 项目负责人\n"
+        "以LangGraph+LangChain实现状态管理\n"
+        "项目三：金融智投 项目负责人\n"
+        "·Milvus 1095 向量，BGE-M3 编码\n"
+        "项目四：智评平台 项目负责人\n"
+    )
+    issues = find_credibility_issues(text)
+    codes = {code for code, _, _ in issues}
+    assert "C5" in codes
+    assert "C6" in codes
+    assert any("小参数" in note or "4B" in note for _, note, _ in issues)
+    assert any("LangGraph" in note for _, note, _ in issues)
+    assert any("向量" in note for _, note, _ in issues)
+
+    md = tmp_path / "cred.resume.md"
+    md.write_text(text, encoding="utf-8")
+    result = judge_resume(md, root=tmp_path, content_assessor=_pass_assessor)
+    c5 = next(item for item in result.pass_line if item["id"] == "C5")
+    c6 = next(item for item in result.pass_line if item["id"] == "C6")
+    assert c5["doubtful"] is True
+    assert c6["doubtful"] is True
+    by_id = {item["id"]: item for item in result.level_line}
+    assert by_id["H4"]["level"] == "mid"
+    assert by_id["H5"]["level"] == "mid"
+
+
 def test_judge_from_resume_md(tmp_path: Path) -> None:
     md = tmp_path / "data" / "output" / "demo" / "demo.resume.md"
     md.parent.mkdir(parents=True)
@@ -122,11 +282,14 @@ def test_judge_from_resume_md(tmp_path: Path) -> None:
     result = judge_resume(md, root=tmp_path, content_assessor=_pass_assessor)
     assert result.content_pass is True
     assert result.doubtful_items
-    assert "内容合格" in result.report_md.read_text(encoding="utf-8")
+    report = result.report_md.read_text(encoding="utf-8")
+    assert "内容合格" in report
+    assert "| 水平 |" in report
     data = json.loads(result.report_json.read_text(encoding="utf-8"))
     assert data["judges_content"] is True
     assert data["evaluates_layout"] is False
     assert len(data["pass_line"]) == 9
+    assert data["level_line"][0]["level"] == "high"
 
 
 def test_judge_from_pdf_after_read_resume(tmp_path: Path) -> None:
@@ -162,6 +325,7 @@ def test_cli_pass_verdict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     result = runner.invoke(app, ["judge-resume", str(md)])
     assert result.exit_code == 0, result.output
     assert "内容达标" in result.stdout
+    assert "水平线" in result.stdout
 
 
 def test_cli_fail_exit_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

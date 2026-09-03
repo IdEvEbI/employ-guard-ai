@@ -37,7 +37,8 @@ SYSTEM_PROMPT = """你是简历「排版」检查员。只根据页图判断版�
     {"code": "leading_punct", "found": false, "pages": [], "note": ""},
     {"code": "bullet_inconsistent", "found": false, "pages": [], "note": ""},
     {"code": "alignment", "found": false, "pages": [], "note": ""},
-    {"code": "tight_spacing", "found": false, "pages": [], "note": ""}
+    {"code": "tight_spacing", "found": false, "pages": [], "note": ""},
+    {"code": "font_inconsistent", "found": false, "pages": [], "note": ""}
   ]
 }
 
@@ -56,20 +57,26 @@ SYSTEM_PROMPT = """你是简历「排版」检查员。只根据页图判断版�
 1. leading_punct：是否出现标点（，。；：、.!?)等）落在行首（中文排版忌行首标点）。多处或醒目 → found=true；若严重妨碍扫读，P3.pass=false。
 2. bullet_inconsistent：列表符号种类或缩进是否前后不一致。明显混用 → found=true，且 Q2.signal 倾向 false；严重混乱 → P3.pass=false。
 3. alignment：正文是否应左对齐却出现随意居中/错位；是否误用两端对齐导致字距忽大忽小；同级标题或条目左缘是否不齐。明显问题 → found=true，且 Q1.signal 倾向 false；大面积错位 → P3.pass=false。
-4. tight_spacing：段前段后或行距是否过密，模块之间几乎无呼吸感，文字挤成墙。明显过密 → found=true；达到「文字墙」程度 → P4.pass=false。
+4. tight_spacing：段前段后或行距是否过密，模块之间几乎无呼吸感，文字挤成墙。明显过密 → found=true；达到「文字墙」程度 → P4.pass=false。多页简历若单页内大段正文挤成墙、关键信息淹没 → found=true。
+5. long_blocks（可选写入 note 到 tight_spacing）：页内是否出现大段连续正文、要点不短、扫读吃力；若明显 → tight_spacing.found=true，note 写明「长段宜拆成项目符号短句」。
+6. font_inconsistent（**须逐页对照，宁严勿松**）：逐页比较——① 技能区正文 vs 项目 / 工作区正文的**字号与字重**是否跳变；② 同级小节标题条（蓝底条 / 加粗标题）样式是否前后不一；③ 跨页正文字体族或字号是否明显变大变小；④ 同一模块内中英混排是否忽大忽小。只要有一处肉眼可辨的前后不一致 → **found=true**，pages 写页码，note 写「哪里与哪里不一致」。拿不准时优先 found=true。**单独字体不一致不得因此把 P2～P5 判未过**，除非已严重到无法扫读（那时用 P3）。禁止在「看起来还整齐」时一律 found=false 敷衍。
 
 ## 行业常见版式要点（仅作视觉参照，仍只评版式）
 - 正文宜统一左对齐；避免正文大段居中或两端对齐造成字距不匀。
-- 列表符号全文一种风格；条目缩进一致。
+- 列表符号全文一种风格；条目缩进一致；**宜用短要点，避免整页长段墙**。
 - 模块之间保留可感知间距；行距过紧会降低扫读效率。
+- 正文与同级标题宜全文统一字号与字体；前后跳变记入 font_inconsistent。
 - 边距过窄易导致切字（归入 P2）。
+- 投递成品宜 ≤4 页；超页时仍须指出长段、过密等可改点（P1 由规则层计页）。
 - 不评价照片、配色喜好或文案质量。
 """
 
 USER_PROMPT = (
     "以上是按页顺序的简历页图。请严格按系统说明只输出 JSON。"
     "Q1～Q3 的 note 必须分别对应「对齐 / 列表与标题 / 联系方式分区」，禁止改写含义。"
-    "defects 四项必须全部给出。"
+    "defects 五项必须全部给出（含 font_inconsistent）。"
+    "请专门对比第 1 页技能区与后续页项目区的字号 / 字重；有跳变就把 font_inconsistent.found 设为 true。"
+    "字体不一致只写入细项，不要单独因此把合格线判未过。"
     "不要根据文字内容判断能不能投递。"
 )
 
@@ -80,6 +87,12 @@ DEFECT_CODES = (
     "bullet_inconsistent",
     "alignment",
     "tight_spacing",
+    "font_inconsistent",
+)
+
+FONT_HUMAN_REVIEW_TIP = (
+    "请人工再看各页正文字号、字体族与同级标题样式是否前后一致"
+    "（技能区与项目区、首页与后续页）；视觉模型易漏判，不因此单独判合格线未过。"
 )
 
 
@@ -93,12 +106,69 @@ class LayoutResult:
     pass_line: list[dict[str, Any]]
     level_line: list[dict[str, Any]]
     defects: list[dict[str, Any]]
+    revision_tips: list[str]
     report_md: Path
     report_json: Path
 
 
 class CheckLayoutError(Exception):
     """缺少页图、输入无效，或查排版失败。"""
+
+
+def build_revision_tips(
+    *,
+    page_count: int,
+    pass_line: list[dict[str, Any]],
+    defects: list[dict[str, Any]],
+) -> list[str]:
+    """合格线未过或有细项时，给出可执行的压页 / 扫读改稿要点。"""
+    tips: list[str] = []
+    if page_count > MAX_PASS_PAGES:
+        tips.append(
+            f"当前共 {page_count} 页，须压到 {MAX_PASS_PAGES} 页以内再投。"
+        )
+        tips.append(
+            "优先压缩个人优势与非目标方向经历，项目职责改为短要点，删除重复技能堆砌。"
+        )
+        tips.append(
+            "长段落拆成项目符号（•）短句，让岗位方向、主项目与量化结果更容易被扫到。"
+        )
+    failed_ids = {str(item.get("id")) for item in pass_line if not item.get("pass")}
+    if "P2" in failed_ids:
+        tips.append("先消除出框、叠字或切字，保证每页正文完整可读。")
+    if "P3" in failed_ids:
+        tips.append("理清技能 / 项目 / 工作等主块分区，统一列表符号与缩进，保证可扫读。")
+    if "P4" in failed_ids:
+        tips.append("减轻文字墙：加大模块间距，把长段改为短要点，避免整页挤满。")
+    for item in defects:
+        if not item.get("found"):
+            continue
+        code = str(item.get("code") or "")
+        note = str(item.get("note") or "").strip()
+        if code == "tight_spacing":
+            tips.append(note or "段前段后过密，宜留白并拆短句。")
+        elif code == "bullet_inconsistent":
+            tips.append(note or "列表符号与缩进宜全文统一。")
+        elif code == "alignment":
+            tips.append(note or "同级块左缘对齐，避免随意居中或错位。")
+        elif code == "leading_punct":
+            tips.append(note or "避免标点落在行首。")
+        elif code == "font_inconsistent":
+            tips.append(note or "统一正文字号与同级标题样式，避免前后跳变。")
+    font_found = any(
+        str(item.get("code") or "") == "font_inconsistent" and item.get("found")
+        for item in defects
+    )
+    if not font_found:
+        tips.append(FONT_HUMAN_REVIEW_TIP)
+    # 去重保序
+    seen: set[str] = set()
+    unique: list[str] = []
+    for tip in tips:
+        if tip not in seen:
+            seen.add(tip)
+            unique.append(tip)
+    return unique
 
 
 def _sha256_pages(paths: list[Path]) -> str:
@@ -264,6 +334,7 @@ def _markdown_report(
     pass_line: list[dict[str, Any]],
     level_line: list[dict[str, Any]],
     defects: list[dict[str, Any]],
+    revision_tips: list[str],
     pages_dir: Path,
 ) -> str:
     verdict = "排版合格" if layout_pass else "排版未合格"
@@ -286,11 +357,17 @@ def _markdown_report(
         note = str(item["note"]).replace("|", "\\|").replace("\n", " ")
         lines.append(f"| {item['id']} | {mark} | {note} |")
 
+    if revision_tips:
+        lines.extend(["", "## 改稿要点", ""])
+        for tip in revision_tips:
+            lines.append(f"- {tip}")
+
     defect_labels = {
         "leading_punct": "行首标点",
         "bullet_inconsistent": "列表符号不一致",
         "alignment": "对齐异常",
         "tight_spacing": "段前段后过密",
+        "font_inconsistent": "字体字号不一致",
     }
     lines.extend(["", "## 细项缺陷（页图）", "", "| 代码 | 是否发现 | 页码 | 说明 |", "| ---- | -------- | ---- | ---- |"])
     for item in defects:
@@ -302,7 +379,7 @@ def _markdown_report(
 
     lines.extend(["", "## 水平线", ""])
     if not layout_pass:
-        lines.append("未过合格线，不输出「水平更高 / 更低」的排序结论。")
+        lines.append("未过合格线，不输出「水平更高 / 更低」的排序结论。改稿请先看上方「改稿要点」。")
     else:
         lines.extend(
             [
@@ -340,6 +417,11 @@ def check_layout(
     layout_pass = all(bool(item.get("pass")) for item in pass_line)
     if not layout_pass:
         level_line = []
+    revision_tips = build_revision_tips(
+        page_count=page_count,
+        pass_line=pass_line,
+        defects=defects,
+    )
 
     stem = pdf_path.stem
     md_name = f"{stem}.layout.md"
@@ -360,6 +442,7 @@ def check_layout(
         "pass_line": pass_line,
         "level_line": level_line,
         "defects": defects,
+        "revision_tips": revision_tips,
         "method": {
             "P1": "rule",
             "P2_P5_Q": "vision" if visual_assessor is None else "injected",
@@ -375,6 +458,7 @@ def check_layout(
             pass_line=pass_line,
             level_line=level_line,
             defects=defects,
+            revision_tips=revision_tips,
             pages_dir=pages_dir,
         ),
         encoding="utf-8",
@@ -390,6 +474,7 @@ def check_layout(
         pass_line=pass_line,
         level_line=level_line,
         defects=defects,
+        revision_tips=revision_tips,
         report_md=report_md,
         report_json=report_json,
     )
