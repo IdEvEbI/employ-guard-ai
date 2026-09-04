@@ -24,7 +24,7 @@
 
 请阅读 [03-delivery/README.md](./03-delivery/README.md)。
 
-当前只做什么，以 [开发看板](./03-delivery/001_dev-board_开发看板.md) 为准。如何开 Issue、如何合入，见 [分支与合入](./03-delivery/002_devops-workflow_分支与合入.md)。
+当前只做什么，以 [开发看板](./03-delivery/001_dev-board_开发看板.md) 为准。如何开 Issue、如何合入，见 [分支与合入](./03-delivery/002_devops-workflow_分支与合入.md)。老师第一次跑通见 [003](./03-delivery/003_onboard_老师第一次跑通.md)。
 
 ## 5. 新会话推荐阅读顺序
 

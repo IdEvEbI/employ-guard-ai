@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import shutil
-import sys
 from pathlib import Path
 
 import typer
 
 from employ_guard import __version__
+from employ_guard.check_env import run_env_check
 from employ_guard.check_layout import CheckLayoutError, check_layout
 from employ_guard.check_writing import CheckWritingError, check_writing
 from employ_guard.draft_questions import DraftQuestionsError, draft_questions
@@ -33,20 +32,31 @@ def version() -> None:
 
 @app.command()
 def check() -> None:
-    """检查本机是否具备后续工具所需的基础环境。"""
-    python_ok = sys.version_info >= (3, 12)
-    ffmpeg_path = shutil.which("ffmpeg")
+    """检查本机是否具备投前看简历所需环境（缺密钥 / 缺依赖会说明怎么补）。"""
+    result = run_env_check()
+    for item in result.items:
+        mark = "通过" if item.ok else ("提示" if not item.required else "未通过")
+        color = (
+            typer.colors.GREEN
+            if item.ok
+            else (typer.colors.YELLOW if not item.required else typer.colors.RED)
+        )
+        typer.secho(f"{item.name}：{mark} — {item.detail}", fg=color)
 
-    typer.echo(
-        f"Python {sys.version.split()[0]} （要求 >= 3.12）："
-        f"{'通过' if python_ok else '未通过'}"
-    )
-    typer.echo(
-        f"ffmpeg：{'已找到 ' + ffmpeg_path if ffmpeg_path else '未找到（面试录音抽轨时需要，可用 brew install ffmpeg 安装）'}"
-    )
-
-    if not python_ok:
-        raise typer.Exit(code=1)
+    if result.ok:
+        typer.secho(
+            "环境可用于投前看简历。下一步见 docs/03-delivery/003_onboard_老师第一次跑通.md",
+            fg=typer.colors.GREEN,
+            bold=True,
+        )
+    else:
+        typer.secho(
+            "请先按上面「未通过」项补齐，再运行 employ-guard resume。",
+            err=True,
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(code=result.exit_code)
 
 
 @app.command("pdf-to-images")
