@@ -1,6 +1,6 @@
 # 开发看板
 
-- **版本**：v0.2.18
+- **版本**：v0.2.19
 - **日期**：2026-09-04
 - **产品源**：[产品说明](../01-product/001_prd_就业守护助手产品说明.md)
 - **合入方式**：[分支与合入](./002_devops-workflow_分支与合入.md)
@@ -11,12 +11,12 @@
 
 ## 1. 当前只做什么
 
-| 项         | 口径                                                                                                           |
-| ---------- | -------------------------------------------------------------------------------------------------------------- |
-| 阶段       | **投前看简历 · 排查增强**（听后做复盘暂缓）                                                                    |
-| 当前 Issue | [#47](https://github.com/IdEvEbI/employ-guard-ai/issues/47) `docs(onboard): 老师第一次跑通与加强 check`（R11） |
-| 做完的标志 | 半页安装说明；`check` 提示缺密钥 / 缺依赖；不引入 GUI；测试与看板已更新                                        |
-| 现在不做   | 听后做复盘；全员门户 / GUI；LangChain / LangGraph；未轮到的 R12 及以后项                                       |
+| 项         | 口径                                                                                                 |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| 阶段       | **投前看简历 · 排查增强**（听后做复盘暂缓）                                                          |
+| 当前 Issue | [#49](https://github.com/IdEvEbI/employ-guard-ai/issues/49) `feat(resume): 扫描件 OCR 抽文本`（R12） |
+| 做完的标志 | 文字层为空时 OCR 兜底；失败退出码 1 且不得写成不能投；check / 说明已提示 tesseract；测试已更新       |
+| 现在不做   | 听后做复盘；全员门户 / GUI；LangChain / LangGraph；未轮到的 R13 及以后项                             |
 
 标准正文：[04-standard](../04-standard/README.md)。老师命令：[006](../02-architecture/006_resume_投前看简历技术说明.md)（R6 已完成）。查排版 / 文字 / 内容 / 练习题见 [002](../02-architecture/002_check-layout_查排版技术说明.md)～[005](../02-architecture/005_draft-questions_出练习题技术说明.md)。
 
@@ -82,8 +82,8 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | R8b | `feat(cli): resume 步骤进度与耗时提示`        | 已完成（[#40](https://github.com/IdEvEbI/employ-guard-ai/issues/40) / PR #41） | 每步开始 / 结束有提示；可选打印耗时；不改变评价口径                                             |
 | R9  | `feat(resume): 出图查排版与读文本路径并行`    | 已完成（[#43](https://github.com/IdEvEbI/employ-guard-ai/issues/43) / PR #44） | `(出图→排版) ∥ (抽文本→文字→判断→题)`；结果与串行一致；失败口径不变                             |
 | R10 | `feat(cli): 目录批跑与本地总表`               | 已完成（[#45](https://github.com/IdEvEbI/employ-guard-ai/issues/45) / PR #46） | 对文件夹逐份调用 `resume`；写出本地总表（路径、排版、内容、退出码、brief）；不点名、不上门户    |
-| R11 | `docs(onboard): 老师第一次跑通与加强 check`   | 进行中（[#47](https://github.com/IdEvEbI/employ-guard-ai/issues/47)）          | 半页安装说明；`check` 能提示缺密钥 / 缺依赖；不引入 GUI                                         |
-| R12 | `feat(resume): 扫描件 OCR 抽文本`             | 待开                                                                           | OCR 只挂在 `read-resume`；失败仍退出码 1，不得写成「不能投」                                    |
+| R11 | `docs(onboard): 老师第一次跑通与加强 check`   | 已完成（[#47](https://github.com/IdEvEbI/employ-guard-ai/issues/47) / PR #48） | 半页安装说明；`check` 能提示缺密钥 / 缺依赖；不引入 GUI                                         |
+| R12 | `feat(resume): 扫描件 OCR 抽文本`             | 进行中（[#49](https://github.com/IdEvEbI/employ-guard-ai/issues/49)）          | OCR 只挂在 `read-resume`；失败仍退出码 1，不得写成「不能投」                                    |
 | R13 | `feat(convert): Word 转 PDF`                  | 待开                                                                           | 独立工具；转换失败不得判内容不合格；本期仍以 PDF 为评价输入                                     |
 | R3b | `feat(layout): 几何规则补强查排版`            | 待开                                                                           | 页数 / 过密等规则层兜底；不替代页图；排在 OCR / Word 之后评估                                   |
 
@@ -158,3 +158,4 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | v0.2.16 | 2026-09-03 | #40 已合入；当前推进 #43 R9（出图查排版 ∥ 读文本路径）               |
 | v0.2.17 | 2026-09-03 | #43 已合入；当前推进 #45 R10（目录批跑与本地总表）                   |
 | v0.2.18 | 2026-09-04 | #45 已合入；当前推进 #47 R11（老师第一次跑通与加强 check）           |
+| v0.2.19 | 2026-09-04 | #47 已合入；当前推进 #49 R12（扫描件 OCR 抽文本）                    |
