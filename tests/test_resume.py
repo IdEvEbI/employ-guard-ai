@@ -88,13 +88,26 @@ def _fail_content(_text: str, _job: str | None) -> dict:
 def _questions(_text: str, _job: str | None) -> dict:
     return {
         "scope": "通用技术面，不是某家公司的真题",
-        "questions": [
+        "projects": [
             {
-                "id": "Q1",
-                "category": "项目深挖",
-                "question": "主项目怎么做检索？",
-                "why": "简历写了检索。",
-                "focus": "讲清召回。",
+                "name": "主项目",
+                "why_selected": "测试用。",
+                "basics": [
+                    {
+                        "id": "P1-B1",
+                        "question": "主项目怎么做检索？",
+                        "focus": "讲清召回。",
+                        "follow_ups": ["为何选混合检索？"],
+                    }
+                ],
+                "deep_dives": [
+                    {
+                        "id": "P1-D1",
+                        "question": "指标掉了怎么定位？",
+                        "focus": "可观测。",
+                        "why": "简历写了评测。",
+                    }
+                ],
             }
         ],
     }
@@ -133,7 +146,7 @@ def test_full_pass_exit_0(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert result.layout_pass is True
     assert result.content_pass is True
-    assert result.questions_count == 1
+    assert result.questions_count == 2
     assert [s.name for s in result.steps] == list(STEP_ORDER)
     assert all(s.status == "ran" for s in result.steps if s.name != "draft-questions")
     assert result.steps[-1].name == "draft-questions"
@@ -179,7 +192,7 @@ def test_layout_fail_still_finishes_exit_2(tmp_path: Path) -> None:
     assert result.exit_code == 2
     assert result.layout_pass is False
     assert result.content_pass is True
-    assert result.questions_count == 1
+    assert result.questions_count == 2
     assert (result.run_dir / "weak.questions.json").is_file()
 
 
@@ -190,7 +203,7 @@ def test_content_fail_exit_2(tmp_path: Path) -> None:
     assert result.exit_code == 2
     assert result.layout_pass is True
     assert result.content_pass is False
-    assert result.questions_count == 1
+    assert result.questions_count == 2
 
 
 def test_skip_existing_artifacts(tmp_path: Path) -> None:
@@ -205,7 +218,7 @@ def test_skip_existing_artifacts(tmp_path: Path) -> None:
     assert all(s.status == "skipped" for s in second.steps)
     assert second.layout_pass is True
     assert second.content_pass is True
-    assert second.questions_count == 1
+    assert second.questions_count == 2
 
 
 def test_force_reruns_even_when_hash_matches(tmp_path: Path) -> None:

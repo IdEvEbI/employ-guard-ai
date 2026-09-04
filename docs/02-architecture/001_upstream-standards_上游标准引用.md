@@ -48,7 +48,7 @@ prompts/
   system_tone.md       # 合格线 / 水平线、文风、对事不对人
   check_layout.md      # 查排版（只看页图；合格线须维护者确认）
   judge_resume.md      # 判能不能投（内容标准须维护者确认后再改）
-  draft_questions.md   # 练习题（标明推测，不是真题）
+  draft_questions.md   # 按项目练习题（标明推测，不是真题）
   extract_qa.md        # 从逐字稿还原问答
   review_interview.md  # 面试评价（不要套用简历内容标准）
 ```

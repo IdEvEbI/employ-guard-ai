@@ -10,7 +10,10 @@ from employ_guard import __version__
 from employ_guard.check_env import run_env_check
 from employ_guard.check_layout import CheckLayoutError, check_layout
 from employ_guard.check_writing import CheckWritingError, check_writing
-from employ_guard.draft_questions import DraftQuestionsError, draft_questions
+from employ_guard.draft_questions import (
+    DraftQuestionsError,
+    draft_questions,
+)
 from employ_guard.judge_resume import JudgeResumeError, judge_resume
 from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
@@ -271,7 +274,7 @@ def draft_questions_cmd(
         help="可选：目标岗位说明文本文件。",
     ),
 ) -> None:
-    """根据简历文本出练习题。本步不判能不能投，不评排版。"""
+    """按主项目出基础题与追问。本步不判能不能投，不评排版。"""
     job_text: str | None = None
     if job_desc is not None:
         if not job_desc.is_file():
@@ -285,14 +288,18 @@ def draft_questions_cmd(
         typer.secho(str(exc), err=True, fg=typer.colors.RED)
         raise typer.Exit(code=1) from exc
 
-    typer.echo(f"已写出练习题：{result.report_md}")
+    typer.echo(f"已写出按项目练习题：{result.report_md}")
     typer.echo("本步只出练习题（推测），不判能不能投，不评排版。")
     typer.echo(f"范围：{result.scope}")
-    typer.echo(f"共 {len(result.questions)} 道题（详见报告）。")
-    for item in result.questions[:5]:
-        typer.echo(f"  - {item.get('id')}（{item.get('category')}）：{item.get('question')}")
-    if len(result.questions) > 5:
-        typer.echo(f"  … 另有 {len(result.questions) - 5} 道，见报告。")
+    typer.echo(
+        f"共 {result.project_count} 个主项目、{result.question_count} 道题（详见报告）。"
+    )
+    for project in result.projects[:3]:
+        basics = len(project.get("basics") or [])
+        deep = len(project.get("deep_dives") or [])
+        typer.echo(f"  - {project.get('name')}：基础 {basics} · 深挖 {deep}")
+    if len(result.projects) > 3:
+        typer.echo(f"  … 另有 {len(result.projects) - 3} 个项目，见报告。")
 
 
 def _print_single_resume_result(result, *, triage: bool, no_questions: bool) -> None:  # type: ignore[no-untyped-def]
@@ -356,7 +363,7 @@ def _print_single_resume_result(result, *, triage: bool, no_questions: bool) -> 
     if triage or no_questions:
         typer.echo("  练习题：已关闭" + ("（排查模式）" if triage else ""))
     elif result.questions_count is not None:
-        typer.echo(f"  练习题：{result.questions_count} 道（推测，供练习）")
+        typer.echo(f"  练习题：{result.questions_count} 道（按项目推测，供练习）")
     else:
         typer.echo("  练习题：未写出")
 
@@ -395,12 +402,12 @@ def resume_cmd(
     no_questions: bool = typer.Option(
         False,
         "--no-questions",
-        help="关掉出练习题这一步。",
+        help="关掉按项目出练习题这一步。",
     ),
     triage: bool = typer.Option(
         False,
         "--triage",
-        help="排查模式：关掉出练习题与查文字表达，并写出短教练摘要。",
+        help="排查模式：关掉按项目出练习题与查文字表达，并写出短教练摘要。",
     ),
     force: bool = typer.Option(
         False,
