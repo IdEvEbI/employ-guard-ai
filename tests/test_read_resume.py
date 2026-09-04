@@ -117,3 +117,59 @@ def test_cli_rejects_non_pdf(tmp_path: Path) -> None:
     result = runner.invoke(app, ["read-resume", str(fake)])
     assert result.exit_code == 1
     assert "不是 PDF" in result.output
+
+
+def _write_image_only_pdf(path: Path, label: str) -> None:
+    """无文字层的纯图 PDF（模拟扫描件）。"""
+    src = pymupdf.open()
+    page = src.new_page(width=595, height=842)
+    page.insert_text((72, 72), label, fontsize=24)
+    pix = page.get_pixmap(dpi=120)
+    src.close()
+    document = pymupdf.open()
+    page2 = document.new_page(width=595, height=842)
+    page2.insert_image(page2.rect, pixmap=pix)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(path)
+    document.close()
+
+
+def test_image_only_pdf_uses_injected_ocr(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "scan.pdf"
+    _write_image_only_pdf(pdf, "SCAN-LABEL")
+
+    def _fake_ocr(_page: pymupdf.Page) -> str:
+        return "OCR-SCAN-LABEL"
+
+    run_dir = extract_resume_text(pdf, root=tmp_path, ocr_page=_fake_ocr)
+    md = (run_dir / "scan.resume.md").read_text(encoding="utf-8")
+    assert "OCR-SCAN-LABEL" in md
+    assert "OCR" in md
+    payload = json.loads((run_dir / "scan.resume.json").read_text(encoding="utf-8"))
+    assert payload["extraction"] == "ocr"
+    assert payload["ocr_pages"] == [1]
+    assert payload["pages"][0]["source"] == "ocr"
+
+
+def test_image_only_pdf_without_tesseract_explains(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    pdf = tmp_path / "data" / "input" / "scan-empty.pdf"
+    _write_image_only_pdf(pdf, "NO-LAYER")
+    monkeypatch.setattr("employ_guard.read_resume.tesseract_available", lambda: False)
+    with pytest.raises(ReadResumeError, match="tesseract"):
+        extract_resume_text(pdf, root=tmp_path)
+
+
+def test_native_text_does_not_need_ocr(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "digital.pdf"
+    _write_pdf(pdf, ["DIGITAL-RESUME-BODY"])
+    calls = {"n": 0}
+
+    def _should_not_run(_page: pymupdf.Page) -> str:
+        calls["n"] += 1
+        return "SHOULD-NOT-APPEAR"
+
+    run_dir = extract_resume_text(pdf, root=tmp_path, ocr_page=_should_not_run)
+    assert calls["n"] == 0
+    payload = json.loads((run_dir / "digital.resume.json").read_text(encoding="utf-8"))
+    assert payload["extraction"] == "native"
+    assert payload["ocr_pages"] == []

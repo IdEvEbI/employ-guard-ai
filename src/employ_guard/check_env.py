@@ -124,6 +124,22 @@ def run_env_check(*, root: Path | None = None) -> EnvCheckResult:
         )
     )
 
+    tess = shutil.which("tesseract")
+    result.items.append(
+        CheckItem(
+            name="tesseract",
+            ok=True,
+            detail=(
+                f"已找到 {tess}（扫描件 OCR 可用）"
+                if tess
+                else "未找到（仅扫描件 / 纯图 PDF 需要；"
+                "macOS：brew install tesseract tesseract-lang。"
+                "数字 PDF 不需要）"
+            ),
+            required=False,
+        )
+    )
+
     ffmpeg_path = shutil.which("ffmpeg")
     result.items.append(
         CheckItem(
