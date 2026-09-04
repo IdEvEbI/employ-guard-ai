@@ -11,10 +11,13 @@ from typer.testing import CliRunner
 
 from employ_guard.check_layout import (
     CheckLayoutError,
+    build_revision_tips,
     check_layout,
     evaluate_p1,
+    FONT_HUMAN_REVIEW_TIP,
 )
 from employ_guard.cli import app
+from employ_guard.layout_geometry import apply_geometry_fallback, scan_page_geometry
 from employ_guard.pdf_to_images import render_pdf_to_images
 
 runner = CliRunner()
@@ -204,3 +207,72 @@ def test_cli_rejects_without_pages(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     result = runner.invoke(app, ["check-layout", str(pdf)])
     assert result.exit_code == 1
     assert "pdf-to-images" in result.output
+
+
+def _write_dense_pdf(path: Path) -> None:
+    document = pymupdf.open()
+    page = document.new_page(width=595, height=842)
+    for y in range(36, 820, 9):
+        page.insert_text((36, y), ("密排文字墙示例ABCDEFG" * 6), fontsize=8)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(path)
+    document.close()
+
+
+def test_geometry_flags_dense_wall_pages(tmp_path: Path) -> None:
+    pdf = tmp_path / "dense.pdf"
+    _write_dense_pdf(pdf)
+    document = pymupdf.open(pdf)
+    pix = document[0].get_pixmap(dpi=100)
+    page_png = tmp_path / "001.png"
+    pix.save(page_png)
+    document.close()
+    scan = scan_page_geometry([page_png])
+    assert scan.dense_pages == [1]
+    assert scan.wall_pages == [1]
+
+
+def test_geometry_fallback_marks_tight_and_p4_when_vision_misses() -> None:
+    from employ_guard.layout_geometry import GeometryScan
+
+    scan = GeometryScan(
+        page_row_occupancy=[0.7],
+        page_avg_gap=[0.2],
+        dense_pages=[1],
+        wall_pages=[1],
+    )
+    pass_line = [
+        {"id": "P2", "pass": True, "note": "ok", "method": "vision"},
+        {"id": "P3", "pass": True, "note": "ok", "method": "vision"},
+        {"id": "P4", "pass": True, "note": "留白正常", "method": "vision"},
+        {"id": "P5", "pass": True, "note": "ok", "method": "vision"},
+    ]
+    defects = [
+        {"code": "leading_punct", "found": False, "pages": [], "note": ""},
+        {"code": "bullet_inconsistent", "found": False, "pages": [], "note": ""},
+        {"code": "alignment", "found": False, "pages": [], "note": ""},
+        {"code": "tight_spacing", "found": False, "pages": [], "note": ""},
+        {"code": "font_inconsistent", "found": False, "pages": [], "note": ""},
+    ]
+    new_pass, new_defects = apply_geometry_fallback(pass_line, defects, scan)
+    p4 = next(item for item in new_pass if item["id"] == "P4")
+    tight = next(item for item in new_defects if item["code"] == "tight_spacing")
+    assert p4["pass"] is False
+    assert p4["method"] == "rule"
+    assert tight["found"] is True
+    assert tight["method"] == "rule"
+
+
+def test_check_layout_geometry_fallback_on_dense_pdf(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "wall.pdf"
+    _write_dense_pdf(pdf)
+    render_pdf_to_images(pdf, root=tmp_path, dpi=100)
+    result = check_layout(pdf, root=tmp_path, visual_assessor=_pass_visual)
+    assert result.layout_pass is False
+    tight = next(item for item in result.defects if item["code"] == "tight_spacing")
+    assert tight["found"] is True
+    p4 = next(item for item in result.pass_line if item["id"] == "P4")
+    assert p4["pass"] is False
+    payload = json.loads(result.report_json.read_text(encoding="utf-8"))
+    assert "geometry" in payload
+    assert payload["geometry"]["wall_pages"] == [1]

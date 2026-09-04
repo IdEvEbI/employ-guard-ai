@@ -1,6 +1,6 @@
 # 开发看板
 
-- **版本**：v0.2.19
+- **版本**：v0.2.20
 - **日期**：2026-09-04
 - **产品源**：[产品说明](../01-product/001_prd_就业守护助手产品说明.md)
 - **合入方式**：[分支与合入](./002_devops-workflow_分支与合入.md)
@@ -11,12 +11,12 @@
 
 ## 1. 当前只做什么
 
-| 项         | 口径                                                                                                 |
-| ---------- | ---------------------------------------------------------------------------------------------------- |
-| 阶段       | **投前看简历 · 排查增强**（听后做复盘暂缓）                                                          |
-| 当前 Issue | [#49](https://github.com/IdEvEbI/employ-guard-ai/issues/49) `feat(resume): 扫描件 OCR 抽文本`（R12） |
-| 做完的标志 | 文字层为空时 OCR 兜底；失败退出码 1 且不得写成不能投；check / 说明已提示 tesseract；测试已更新       |
-| 现在不做   | 听后做复盘；全员门户 / GUI；LangChain / LangGraph；未轮到的 R13 及以后项                             |
+| 项         | 口径                                                                                                      |
+| ---------- | --------------------------------------------------------------------------------------------------------- |
+| 阶段       | **投前看简历 · 排查增强**（听后做复盘暂缓）                                                               |
+| 当前 Issue | [#51](https://github.com/IdEvEbI/employ-guard-ai/issues/51) `feat(layout): 几何规则补强查排版`（R3b）     |
+| 做完的标志 | 页数 + 过密规则层兜底；不替代页图；报告含 geometry；002 与测试已更新                                      |
+| 现在不做   | 听后做复盘；全员门户 / GUI；LangChain / LangGraph；**R13 Word 转 PDF（本轮跳过，稍后开）**；未轮到的 R14+ |
 
 标准正文：[04-standard](../04-standard/README.md)。老师命令：[006](../02-architecture/006_resume_投前看简历技术说明.md)（R6 已完成）。查排版 / 文字 / 内容 / 练习题见 [002](../02-architecture/002_check-layout_查排版技术说明.md)～[005](../02-architecture/005_draft-questions_出练习题技术说明.md)。
 
@@ -34,7 +34,7 @@
 
 默认顺序：M0 → 书面合格线 → 投前看简历可演示（R1～R6）→ **排查增强（R7 起）** →（暂缓）听后做复盘。知识库及以后的能力，不作为本期必须交付。
 
-「判能不能投」和「查排版」必须先有书面合格线。本期简历输入默认仍是 PDF；Word 转 PDF 按下方 R13 单独开，转换失败不得判成内容不合格。
+「判能不能投」和「查排版」必须先有书面合格线。本期简历输入默认仍是 PDF；Word 转 PDF（R13）本轮跳过，稍后单独开；转换失败不得判成内容不合格。
 
 ---
 
@@ -83,9 +83,9 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | R9  | `feat(resume): 出图查排版与读文本路径并行`    | 已完成（[#43](https://github.com/IdEvEbI/employ-guard-ai/issues/43) / PR #44） | `(出图→排版) ∥ (抽文本→文字→判断→题)`；结果与串行一致；失败口径不变                             |
 | R10 | `feat(cli): 目录批跑与本地总表`               | 已完成（[#45](https://github.com/IdEvEbI/employ-guard-ai/issues/45) / PR #46） | 对文件夹逐份调用 `resume`；写出本地总表（路径、排版、内容、退出码、brief）；不点名、不上门户    |
 | R11 | `docs(onboard): 老师第一次跑通与加强 check`   | 已完成（[#47](https://github.com/IdEvEbI/employ-guard-ai/issues/47) / PR #48） | 半页安装说明；`check` 能提示缺密钥 / 缺依赖；不引入 GUI                                         |
-| R12 | `feat(resume): 扫描件 OCR 抽文本`             | 进行中（[#49](https://github.com/IdEvEbI/employ-guard-ai/issues/49)）          | OCR 只挂在 `read-resume`；失败仍退出码 1，不得写成「不能投」                                    |
-| R13 | `feat(convert): Word 转 PDF`                  | 待开                                                                           | 独立工具；转换失败不得判内容不合格；本期仍以 PDF 为评价输入                                     |
-| R3b | `feat(layout): 几何规则补强查排版`            | 待开                                                                           | 页数 / 过密等规则层兜底；不替代页图；排在 OCR / Word 之后评估                                   |
+| R12 | `feat(resume): 扫描件 OCR 抽文本`             | 已完成（[#49](https://github.com/IdEvEbI/employ-guard-ai/issues/49) / PR #50） | OCR 只挂在 `read-resume`；失败仍退出码 1，不得写成「不能投」                                    |
+| R13 | `feat(convert): Word 转 PDF`                  | **本轮跳过**（稍后开）                                                         | 独立工具；转换失败不得判内容不合格；本期仍以 PDF 为评价输入                                     |
+| R3b | `feat(layout): 几何规则补强查排版`            | 进行中（[#51](https://github.com/IdEvEbI/employ-guard-ai/issues/51)）          | 页数 / 过密等规则层兜底；不替代页图；排在 OCR 之后（R13 已跳过）评估                            |
 
 **不做（本阶段）**：听后做复盘；全员自助门户；账号体系；厚 GUI；LangChain / LangGraph；百分制；班级群自动推送；**项目审阅里的薪资匹配**（更稳妥，暂不做）。
 
@@ -128,7 +128,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | 企业查询   | 更晚再做；须有积累与同意规则；默认不点名具体学员                   |
 | 薄 GUI     | 仅当 R7～R11 稳定且有多位老师真用后再评估；不替代命令行            |
 
-不要把这些能力塞进现有的 `resume` 或 `interview`。Word 转 PDF 已上收至 §5 的 R13，按序开 Issue。
+不要把这些能力塞进现有的 `resume` 或 `interview`。Word 转 PDF（R13）本轮跳过，稍后单独开 Issue。
 
 ---
 
@@ -159,3 +159,4 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | v0.2.17 | 2026-09-03 | #43 已合入；当前推进 #45 R10（目录批跑与本地总表）                   |
 | v0.2.18 | 2026-09-04 | #45 已合入；当前推进 #47 R11（老师第一次跑通与加强 check）           |
 | v0.2.19 | 2026-09-04 | #47 已合入；当前推进 #49 R12（扫描件 OCR 抽文本）                    |
+| v0.2.20 | 2026-09-04 | #49 已合入；**跳过 R13**；当前推进 #51 R3b（几何规则补强查排版）     |

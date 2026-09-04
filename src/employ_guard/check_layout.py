@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from employ_guard.layout_geometry import apply_geometry_fallback, scan_page_geometry
 from employ_guard.paths import output_run_dir, resolve_input_file
 from employ_guard.vision import VisionError, chat_with_images
 
@@ -421,6 +422,11 @@ def check_layout(
     visual_pass = list(visual.get("pass_line") or [])
     level_line = list(visual.get("level_line") or [])
     defects = list(visual.get("defects") or _normalize_defects({}))
+    if len(defects) < len(DEFECT_CODES):
+        defects = _normalize_defects({"defects": defects})
+
+    geometry = scan_page_geometry(pages)
+    visual_pass, defects = apply_geometry_fallback(visual_pass, defects, geometry)
 
     pass_line = [p1, *visual_pass]
     layout_pass = all(bool(item.get("pass")) for item in pass_line)
@@ -453,8 +459,10 @@ def check_layout(
         "level_line": level_line,
         "defects": defects,
         "revision_tips": revision_tips,
+        "geometry": geometry.as_dict(),
         "method": {
             "P1": "rule",
+            "geometry_density": "rule",
             "P2_P5_Q": "vision" if visual_assessor is None else "injected",
         },
     }
