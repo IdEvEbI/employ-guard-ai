@@ -72,15 +72,29 @@ def _pass_content(_text: str, _job: str | None) -> dict:
 
 def _pass_questions(_text: str, _job: str | None = None) -> dict:
     return {
-        "questions": [
+        "scope": "通用技术面，不是某家公司的真题",
+        "projects": [
             {
-                "id": "Q1",
-                "category": "project",
-                "question": "请介绍项目？",
-                "why": "练习",
-                "speculative": True,
+                "name": "主项目",
+                "why_selected": "练习",
+                "basics": [
+                    {
+                        "id": "P1-B1",
+                        "question": "请介绍项目？",
+                        "focus": "角色",
+                        "follow_ups": ["你负责哪段？"],
+                    }
+                ],
+                "deep_dives": [
+                    {
+                        "id": "P1-D1",
+                        "question": "失败时怎么降级？",
+                        "focus": "边界",
+                        "why": "简历写了降级。",
+                    }
+                ],
             }
-        ]
+        ],
     }
 
 

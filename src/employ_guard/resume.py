@@ -291,7 +291,9 @@ def write_brief(result: ResumeRunResult) -> Path:
     if result.writing_pass is not None:
         lines.append(f"- 文字表达：`{stem}.writing.md`")
     if result.questions_count is not None:
-        lines.append(f"- 练习题：`{stem}.questions.md`（{result.questions_count} 道，推测）")
+        lines.append(
+            f"- 练习题：`{stem}.questions.md`（{result.questions_count} 道，按项目推测）"
+        )
     elif result.triage:
         lines.append("- 练习题：排查模式未出")
     lines.append("")
@@ -326,15 +328,30 @@ def _load_judge_from_disk(run_dir: Path, stem: str) -> tuple[bool, Path]:
     return bool(data.get("content_pass")), report_md if report_md.is_file() else report_json
 
 
+def _count_questions(data: dict[str, Any]) -> int:
+    projects = data.get("projects") or []
+    if not isinstance(projects, list):
+        return 0
+    total = 0
+    for project in projects:
+        if not isinstance(project, dict):
+            continue
+        basics = project.get("basics") or []
+        deep = project.get("deep_dives") or []
+        if isinstance(basics, list):
+            total += len(basics)
+        if isinstance(deep, list):
+            total += len(deep)
+    return total
+
+
 def _load_questions_from_disk(run_dir: Path, stem: str) -> tuple[int, Path]:
     report_json = run_dir / f"{stem}.questions.json"
     report_md = run_dir / f"{stem}.questions.md"
     if not report_json.is_file():
         raise ResumeError(f"缺少练习题结果：{report_json}")
     data = _read_json(report_json)
-    questions = data.get("questions") or []
-    count = len(questions) if isinstance(questions, list) else 0
-    return count, report_md if report_md.is_file() else report_json
+    return _count_questions(data), report_md if report_md.is_file() else report_json
 
 
 def _run_layout_path(
@@ -473,7 +490,7 @@ def _run_text_path(
     content_assessor: ContentAssessor | None,
     questions_assessor: QuestionsAssessor | None,
 ) -> _PathBundle:
-    """抽文本 → 查文字表达 → 判能不能投 → 出练习题。"""
+    """抽文本 → 查文字表达 → 判能不能投 → 按项目出练习题。"""
     bundle = _PathBundle()
 
     def _add(outcome: StepOutcome, started: float) -> None:
@@ -678,7 +695,11 @@ def _run_text_path(
             count, questions_path = _load_questions_from_disk(run_dir, stem)
         except ResumeError as exc:
             _add(
-                StepOutcome(name="draft-questions", status="failed", detail=str(exc)),
+                StepOutcome(
+                    name="draft-questions",
+                    status="failed",
+                    detail=str(exc),
+                ),
                 t0,
             )
             bundle.hard_error = str(exc)
@@ -688,7 +709,7 @@ def _run_text_path(
             StepOutcome(
                 name="draft-questions",
                 status="skipped",
-                detail=f"已有 {count} 道练习题（PDF 哈希一致）",
+                detail=f"已有 {count} 道按项目练习题（PDF 哈希一致）",
                 path=questions_path,
             ),
             t0,
@@ -705,13 +726,20 @@ def _run_text_path(
         )
     except DraftQuestionsError as exc:
         _add(
-            StepOutcome(name="draft-questions", status="failed", detail=str(exc)),
+            StepOutcome(
+                name="draft-questions",
+                status="failed",
+                detail=str(exc),
+            ),
             t0,
         )
         bundle.hard_error = str(exc)
         return bundle
-    bundle.questions_count = len(questions.questions)
-    base = f"写出 {len(questions.questions)} 道练习题"
+    bundle.questions_count = questions.question_count
+    base = (
+        f"写出 {questions.project_count} 个主项目、"
+        f"{questions.question_count} 道按项目练习题"
+    )
     if force and had_questions:
         detail = f"强制重跑，{base}"
     elif had_questions:
