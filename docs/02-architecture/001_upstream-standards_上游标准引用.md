@@ -49,6 +49,7 @@ prompts/
   check_layout.md      # 查排版（只看页图；合格线须维护者确认）
   judge_resume.md      # 判能不能投（内容标准须维护者确认后再改）
   draft_questions.md   # 按项目练习题（标明推测，不是真题）
+  review_projects.md   # 项目审阅含金量 / 难度档（不含薪资；见 005）
   extract_qa.md        # 从逐字稿还原问答
   review_interview.md  # 面试评价（不要套用简历内容标准）
 ```

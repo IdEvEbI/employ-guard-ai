@@ -20,6 +20,7 @@ from employ_guard.read_resume import ReadResumeError, extract_resume_text
 from employ_guard.paths import resolve_input_path
 from employ_guard.resume import ResumeError, run_resume
 from employ_guard.resume_batch import run_resume_batch
+from employ_guard.review_projects import ReviewProjectsError, review_projects
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -298,6 +299,51 @@ def draft_questions_cmd(
         basics = len(project.get("basics") or [])
         deep = len(project.get("deep_dives") or [])
         typer.echo(f"  - {project.get('name')}：基础 {basics} · 深挖 {deep}")
+    if len(result.projects) > 3:
+        typer.echo(f"  … 另有 {len(result.projects) - 3} 个项目，见报告。")
+
+
+@app.command("review-projects")
+def review_projects_cmd(
+    source: Path = typer.Argument(
+        ...,
+        help="PDF（须已 read-resume）或 *.resume.md / 文本文件。",
+    ),
+    job_desc: Path | None = typer.Option(
+        None,
+        "--job-desc",
+        help="可选：目标岗位说明文本文件。",
+    ),
+) -> None:
+    """按主项目给出含金量档与难度档。本步不判能不能投，不含薪资。"""
+    job_text: str | None = None
+    if job_desc is not None:
+        if not job_desc.is_file():
+            typer.secho(f"找不到岗位说明：{job_desc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+        job_text = job_desc.read_text(encoding="utf-8")
+
+    try:
+        result = review_projects(source, job_description=job_text)
+    except ReviewProjectsError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    tier_zh = {"high": "高", "mid": "中", "low": "低"}
+    typer.echo(f"已写出项目审阅：{result.report_md}")
+    typer.echo("本步只做含金量 / 难度档，不判能不能投，不含薪资。")
+    typer.echo(f"范围：{result.scope}")
+    typer.echo(f"摘要：{result.summary}")
+    typer.echo(f"共 {result.project_count} 个项目（详见报告）。")
+    for project in result.projects[:3]:
+        value = tier_zh.get(str(project.get("value_tier")), project.get("value_tier"))
+        difficulty = tier_zh.get(
+            str(project.get("difficulty_tier")),
+            project.get("difficulty_tier"),
+        )
+        typer.echo(
+            f"  - {project.get('name')}：含金量 {value} · 难度 {difficulty}"
+        )
     if len(result.projects) > 3:
         typer.echo(f"  … 另有 {len(result.projects) - 3} 个项目，见报告。")
 

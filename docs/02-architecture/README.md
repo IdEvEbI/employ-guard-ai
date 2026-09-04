@@ -10,5 +10,6 @@
 | [004 查文字表达技术说明](./004_check-writing_查文字表达技术说明.md) | `check-writing`：规则 + LLM + 003 §3.5    |
 | [005 出练习题技术说明](./005_draft-questions_出练习题技术说明.md)   | `draft-questions`：按项目出题；产品 §4.6  |
 | [006 投前看简历技术说明](./006_resume_投前看简历技术说明.md)        | `resume`：单份或目录批跑；布局 ∥ 文本路径 |
+| [007 项目审阅技术说明](./007_review-projects_项目审阅技术说明.md)   | `review-projects`：含金量 / 难度档；§4.7  |
 
-简历合格线、JD 扫描与简历书写标准见 [04-standard](../04-standard/README.md)。
+简历合格线、JD 扫描、书写标准与项目审阅口径见 [04-standard](../04-standard/README.md)。
