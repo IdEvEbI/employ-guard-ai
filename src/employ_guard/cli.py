@@ -19,6 +19,7 @@ from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
 from employ_guard.paths import resolve_input_path
 from employ_guard.parse_resume import ParseResumeError, parse_resume
+from employ_guard.check_profile import CheckProfileError, check_profile
 from employ_guard.resume import ResumeError, run_resume
 from employ_guard.resume_batch import run_resume_batch
 from employ_guard.review_projects import ReviewProjectsError, review_projects
@@ -128,6 +129,34 @@ def parse_resume_cmd(
             "抽取标记为不完整（parse_incomplete），请人工核对；不因此写成不能投。",
             fg=typer.colors.YELLOW,
         )
+
+
+@app.command("check-profile")
+def check_profile_cmd(
+    source: Path = typer.Argument(
+        ...,
+        help="PDF（须已 read-resume）或 *.resume.md / 文本文件。",
+    ),
+) -> None:
+    """检查首页是否有岗位类表述（C1）。本步不替代整份判能不能投。"""
+    try:
+        result = check_profile(source)
+    except CheckProfileError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"已写出基础信息检测：{result.report_md}")
+    typer.echo("本步只做 C1 分项，不替代整份判能不能投，不评排版。")
+    status_zh = {"pass": "过本项", "fail": "未过本项", "doubtful": "存疑"}.get(
+        result.status, result.status
+    )
+    color = {
+        "pass": typer.colors.GREEN,
+        "fail": typer.colors.RED,
+        "doubtful": typer.colors.YELLOW,
+    }.get(result.status, typer.colors.WHITE)
+    typer.secho(f"本项结论：{status_zh}（{result.status}）", fg=color)
+    typer.echo(f"岗位类表述：{result.target_role or '（未抽到 / 首页未见）'}")
 
 
 @app.command("check-layout")

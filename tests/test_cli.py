@@ -19,6 +19,7 @@ def test_help_exits_zero() -> None:
     assert "draft-questions" in result.stdout
     assert "review-projects" in result.stdout
     assert "parse-resume" in result.stdout
+    assert "check-profile" in result.stdout
     assert "resume" in result.stdout
 
 
