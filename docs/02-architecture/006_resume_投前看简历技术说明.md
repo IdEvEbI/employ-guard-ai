@@ -37,6 +37,7 @@
 
 `review-projects` 现行可单独跑，**尚未**挂入上表；挂入见看板 R22 / R23。  
 `parse-resume` 现行可单独跑（`{stem}.resume.norm.md` + `{stem}.parsed.*`），**尚未**挂入上表；挂入见看板 R23。
+`check-profile` 现行可单独跑（`{stem}.profile.*`，对照 C1），**尚未**挂入上表；挂入见看板 R23。
 
 ## 2.1 目录批跑
 
