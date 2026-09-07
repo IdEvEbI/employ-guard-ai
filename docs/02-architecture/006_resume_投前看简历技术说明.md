@@ -35,7 +35,8 @@
 | 5    | `judge-resume`    | 文本 | 已有 judge 报告，且 `resume.json` 的 PDF 哈希一致                 | `{stem}.judge.md` / `.json`               |
 | 6    | `draft-questions` | 文本 | 已有 questions 报告且哈希一致，或已关闭 / **排查模式**            | `{stem}.questions.md` / `.json`（可关闭） |
 
-`review-projects` 现行可单独跑，**尚未**挂入上表；挂入见看板 R22 / R23。
+`review-projects` 现行可单独跑，**尚未**挂入上表；挂入见看板 R22 / R23。  
+`parse-resume` 现行可单独跑（`{stem}.resume.norm.md` + `{stem}.parsed.*`），**尚未**挂入上表；挂入见看板 R23。
 
 ## 2.1 目录批跑
 

@@ -18,6 +18,7 @@ from employ_guard.judge_resume import JudgeResumeError, judge_resume
 from employ_guard.pdf_to_images import PdfToImagesError, render_pdf_to_images
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
 from employ_guard.paths import resolve_input_path
+from employ_guard.parse_resume import ParseResumeError, parse_resume
 from employ_guard.resume import ResumeError, run_resume
 from employ_guard.resume_batch import run_resume_batch
 from employ_guard.review_projects import ReviewProjectsError, review_projects
@@ -94,6 +95,39 @@ def read_resume(
     md_files = sorted(run_dir.glob("*.resume.md"))
     typer.echo(f"已抽出文本：{md_files[0] if md_files else run_dir}")
     typer.echo("本步不判断能不能投，也不评价排版。")
+
+
+@app.command("parse-resume")
+def parse_resume_cmd(
+    source: Path = typer.Argument(
+        ...,
+        help="PDF（须已 read-resume）或 *.resume.md / 文本文件。",
+    ),
+) -> None:
+    """规范化抽出文本并抽取字段。本步不判能不能投，不评排版。"""
+    try:
+        result = parse_resume(source)
+    except ParseResumeError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"已写出规范化文本：{result.norm_md}")
+    typer.echo(f"规范化方式：{result.normalize_method}")
+    typer.echo(f"已写出字段抽取：{result.parsed_md}")
+    typer.echo("本步只做规范化与字段抽取，不判能不能投，不评排版。")
+    fields = result.fields
+    typer.echo(f"姓名：{fields.get('name') or '（未抽到）'}")
+    typer.echo(f"岗位类表述：{fields.get('target_role') or '（未抽到）'}")
+    typer.echo(
+        f"工作 {len(fields.get('work_experience') or [])} 段 · "
+        f"项目 {len(fields.get('projects') or [])} 个 · "
+        f"技能 {len(fields.get('skills') or [])} 条"
+    )
+    if result.parse_incomplete:
+        typer.secho(
+            "抽取标记为不完整（parse_incomplete），请人工核对；不因此写成不能投。",
+            fg=typer.colors.YELLOW,
+        )
 
 
 @app.command("check-layout")
