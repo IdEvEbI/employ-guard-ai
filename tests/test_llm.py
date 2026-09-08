@@ -92,3 +92,17 @@ def test_chat_completion_empty_raises(monkeypatch: pytest.MonkeyPatch) -> None:
             user_text="u",
             settings={"api_key": "k", "base_url": "https://example.com", "model": "deepseek-v4-flash"},
         )
+
+
+def test_chat_completion_timeout_becomes_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(_request: urllib.request.Request, timeout: float) -> object:
+        raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _boom)
+    with pytest.raises(LLMError, match="超时"):
+        chat_completion(
+            system="s",
+            user_text="u",
+            settings={"api_key": "k", "base_url": "https://example.com", "model": "deepseek-v4-flash"},
+            timeout_sec=12,
+        )

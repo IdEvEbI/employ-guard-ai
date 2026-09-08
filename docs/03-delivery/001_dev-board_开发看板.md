@@ -1,6 +1,6 @@
 # 开发看板
 
-- **版本**：v0.2.38
+- **版本**：v0.2.39
 - **日期**：2026-09-08
 - **产品源**：[产品说明](../01-product/001_prd_就业守护助手产品说明.md)
 - **合入方式**：[分支与合入](./002_devops-workflow_分支与合入.md)
@@ -11,12 +11,12 @@
 
 ## 1. 当前只做什么
 
-| 项         | 口径                                                                                            |
-| ---------- | ----------------------------------------------------------------------------------------------- |
-| 阶段       | **投前看简历 · 排查增强**（结构化链 R26 已合入；补开 R13）                                      |
-| 当前 Issue | [#80](https://github.com/IdEvEbI/employ-guard-ai/issues/80) `feat(convert): Word 转 PDF（R13）` |
-| 做完的标志 | 独立 `word-to-pdf`；失败不得写成不能投；转出 PDF 可接 `resume`；PRD / 看板 / 依赖说明对齐       |
-| 现在不做   | 听后做复盘；GUI / Lang\*；R16；`resume` 直接吃 `.docx`                                          |
+| 项         | 口径                                                                                                      |
+| ---------- | --------------------------------------------------------------------------------------------------------- |
+| 阶段       | **投前看简历 · 排查增强**（R13 已合入；稳定性修补）                                                       |
+| 当前 Issue | [#81](https://github.com/IdEvEbI/employ-guard-ai/issues/81) `fix(resume): 批跑超时或未捕获异常不整批退出` |
+| 做完的标志 | 看图 / 文本 LLM 超时收成领域错误；批跑单份硬失败后继续并写出总表                                          |
+| 现在不做   | 项目审阅 JSON 非法回退（另开）；听后做复盘；GUI / Lang\*；R16；`resume` 直接吃 `.docx`                    |
 
 标准正文：[04-standard](../04-standard/README.md)。老师命令：[006](../02-architecture/006_resume_投前看简历技术说明.md)。
 
@@ -28,7 +28,7 @@
 | ------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------ |
 | **M0**                          | 仓库基础、产品说明、本文、本仓 Cursor Rule                             | 已完成（#1～#7）                                 |
 | **投前看简历**                  | 各个简历工具可单独跑；`resume` 能按顺序跑完                            | 已完成（R1～R6）                                 |
-| **投前看简历 · 排查增强**       | 强制重跑、排查模式、并行、批跑总表、安装说明、OCR 等（仍专注简历）     | 已完成（R7～R12 / R3b）；**R13 进行中**（#80）   |
+| **投前看简历 · 排查增强**       | 强制重跑、排查模式、并行、批跑总表、安装说明、OCR 等（仍专注简历）     | 已完成（R7～R13 / R3b）；稳定性见 **#81**        |
 | **投前看简历 · 辅导增强**       | 按项目出题、项目审阅（无薪资）                                         | R14 / R15 已完成；R16 岗位量抽样待开、不插队本链 |
 | **投前看简历 · 结构化链式检查** | 规范化 → 字段抽取 → 分项检 → 汇总能不能投；挂入 `resume`               | R17 文档先行，再按 §5.2 逐个开 Issue             |
 | **听后做复盘**                  | 转写、还原问答、面试评价可单独跑；`interview` 能按顺序跑完             | **暂缓**                                         |
@@ -78,7 +78,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | R10 | `feat(cli): 目录批跑与本地总表`               | 已完成（[#45](https://github.com/IdEvEbI/employ-guard-ai/issues/45) / PR #46） | 对文件夹逐份调用 `resume`；写出本地总表；不点名、不上门户                                       |
 | R11 | `docs(onboard): 老师第一次跑通与加强 check`   | 已完成（[#47](https://github.com/IdEvEbI/employ-guard-ai/issues/47) / PR #48） | 半页安装说明；`check` 能提示缺密钥 / 缺依赖；不引入 GUI                                         |
 | R12 | `feat(resume): 扫描件 OCR 抽文本`             | 已完成（[#49](https://github.com/IdEvEbI/employ-guard-ai/issues/49) / PR #50） | OCR 只挂在 `read-resume`；失败仍退出码 1，不得写成「不能投」                                    |
-| R13 | `feat(convert): Word 转 PDF`                  | 进行中（[#80](https://github.com/IdEvEbI/employ-guard-ai/issues/80)）          | 独立工具；转换失败不得判内容不合格；不把 `.docx` 变成 `resume` 直接输入                         |
+| R13 | `feat(convert): Word 转 PDF`                  | 已完成（[#80](https://github.com/IdEvEbI/employ-guard-ai/issues/80) / PR #82） | 独立工具；转换失败不得判内容不合格；不把 `.docx` 变成 `resume` 直接输入                         |
 | R3b | `feat(layout): 几何规则补强查排版`            | 已完成（[#51](https://github.com/IdEvEbI/employ-guard-ai/issues/51) / PR #52） | 页数 / 过密等规则层兜底；不替代页图                                                             |
 
 **不做（本阶段）**：听后做复盘；全员自助门户；账号体系；厚 GUI；LangChain / LangGraph；百分制；班级群自动推送；**项目审阅里的薪资匹配**。
@@ -112,7 +112,7 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | R25 | `feat(judge): 汇总前置分项 + 时间检测（再 LLM 补缺口）`   | 已完成（[#74](https://github.com/IdEvEbI/employ-guard-ai/issues/74) / PR #75） | profile 赢 C1；C3/C8 映射；layout/writing 进报告与总出口；时间检测汇总                                        |
 | R26 | `feat(resume): brief 提炼全部存疑与不达标项`              | 已完成（[#76](https://github.com/IdEvEbI/employ-guard-ai/issues/76) / PR #77） | 按源汇总；`write-brief`；不替代分项全文                                                                       |
 
-顺序：R17 →…→ R26。R16 不插队。R13（#80）为排查增强补开，当前尖端。
+顺序：R17 →…→ R26。R16 不插队。R13 已合入；当前尖端 [#81](https://github.com/IdEvEbI/employ-guard-ai/issues/81)（批跑超时隔离）。
 
 **R25 已锁口径（维护者确认）：**
 
@@ -172,3 +172,4 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | v0.2.36 | 2026-09-08 | #74 / PR #75 已合入；开 #76 R26（brief 全部存疑与不达标一览）       |
 | v0.2.37 | 2026-09-08 | #76 / PR #77 已合入；开 #78（writing LLM JSON 失败回退规则层）      |
 | v0.2.38 | 2026-09-08 | #78 / PR #79 已合入；样本到位，开 #80 R13（Word 转 PDF）            |
+| v0.2.39 | 2026-09-08 | #80 / PR #82 已合入；开 #81（批跑超时 / 未捕获异常不整批退出）      |

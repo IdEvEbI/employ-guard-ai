@@ -91,6 +91,11 @@ def chat_with_images(
         raise VisionError(f"看图接口返回 HTTP {exc.code}：{detail}") from exc
     except urllib.error.URLError as exc:
         raise VisionError(f"无法连接看图接口：{exc}") from exc
+    except TimeoutError as exc:
+        # urlopen 连接阶段超时会变成 URLError；读响应超时会原样抛 TimeoutError。
+        raise VisionError(
+            f"看图接口超时（超过 {timeout_sec:.0f} 秒）：{exc}"
+        ) from exc
 
     try:
         data = json.loads(raw)
