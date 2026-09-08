@@ -921,7 +921,12 @@ def _run_text_path(
             bundle.hard_error = str(exc)
             return bundle
         incomplete = "（抽取不完整，不写成不能投）" if parsed.parse_incomplete else ""
-        base = f"已写出规范化正文与字段{incomplete}"
+        degraded = (
+            "（LLM 规范化降级，回退规则层）"
+            if parsed.normalize_method == "rules_fallback"
+            else ""
+        )
+        base = f"已写出规范化正文与字段{incomplete}{degraded}"
         if force and had_parsed:
             detail = f"强制重跑，{base}"
         elif had_parsed:

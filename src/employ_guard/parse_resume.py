@@ -79,6 +79,63 @@ def _strip_md_fence(text: str) -> str:
     return stripped
 
 
+# 规范化 LLM 把思考过程写成正文时的常见话头（须多条同时出现才拒绝，避免误伤自评）。
+_THINKING_MARKERS = (
+    "我们需要",
+    "现在检查",
+    "现在确定",
+    "现在逐段",
+    "逐段输出",
+    "请只输出规范化",
+    "不要前言后语",
+    "不要 Markdown 围栏",
+    "The user wants me",
+    "Let me analyze",
+    "Let me structure",
+    "Need carefully",
+    "系统要求",
+    "系统说",
+)
+_STRONG_THINKING = (
+    "The user wants me",
+    "逐段输出",
+    "现在检查可能缺失",
+    "现在逐段输出",
+)
+_PLACEHOLDER_RE = re.compile(
+    r"(?:^|\n)#{1,4}\s*\.\.\.|\.\.\.\s*list|(?:^|\n)-\s*\.\.\.\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_SHORT_RATIO = 0.28
+_SHORT_SOURCE_MIN = 400
+_SHORT_ABS_MIN = 120
+
+
+def _plain_len(text: str) -> int:
+    return len(re.sub(r"\s+", "", text))
+
+
+def llm_normalize_rejection_reason(source: str, candidate: str) -> str | None:
+    """规范化结果若不像简历正文，返回拒绝原因；否则 None。"""
+    cand = candidate.strip()
+    if not cand:
+        return "规范化返回为空"
+    if cand.startswith(("”。", "。", "，")):
+        return "规范化开头不像简历正文"
+    lowered = cand.lower()
+    hits = [marker for marker in _THINKING_MARKERS if marker.lower() in lowered]
+    strong = [marker for marker in _STRONG_THINKING if marker.lower() in lowered]
+    if len(hits) >= 2 or strong:
+        return "规范化结果含思考过程，不是简历正文"
+    if _PLACEHOLDER_RE.search(cand):
+        return "规范化结果含占位模板"
+    src_n = _plain_len(source)
+    cand_n = _plain_len(cand)
+    if src_n >= _SHORT_SOURCE_MIN and cand_n < max(_SHORT_ABS_MIN, int(src_n * _SHORT_RATIO)):
+        return "规范化结果相对抽出正文过短"
+    return None
+
+
 NormalizeAssessor = Callable[[str], str]
 
 
@@ -105,6 +162,9 @@ def default_normalize_assessor(text: str) -> str:
             cleaned = _strip_md_fence(out)
             if not cleaned.strip():
                 raise ParseResumeError("LLM 规范化返回为空。")
+            reason = llm_normalize_rejection_reason(text, cleaned)
+            if reason:
+                raise ParseResumeError(reason)
             return cleaned.strip()
         except (LLMError, ParseResumeError) as exc:
             last_error = exc
@@ -302,23 +362,23 @@ def normalize_resume_body(
     *,
     assessor: NormalizeAssessor | None = None,
     allow_rules_fallback: bool = True,
-) -> tuple[str, str]:
+) -> tuple[str, str, str | None]:
     """规范化简历正文。默认 LLM；可注入；失败时可回退规则。
 
-    返回 (正文, 方法标记：llm / rules_fallback / injected / rules)。
+    返回 (正文, 方法标记, 降级原因或 None)。方法：llm / rules_fallback / injected / rules。
     """
     light = _light_pre_normalize(text)
     if not light:
-        return "", "empty"
+        return "", "empty", None
     if assessor is not None:
         out = _strip_md_fence(assessor(light)).strip()
-        return out, "injected"
+        return out, "injected", None
     try:
-        return default_normalize_assessor(light), "llm"
-    except ParseResumeError:
+        return default_normalize_assessor(light), "llm", None
+    except ParseResumeError as exc:
         if not allow_rules_fallback:
             raise
-        return normalize_resume_body_rules(light), "rules_fallback"
+        return normalize_resume_body_rules(light), "rules_fallback", str(exc)
 
 
 _PROJECT_TITLE = re.compile(
@@ -540,6 +600,7 @@ class ParseResult:
     parsed_md: Path
     parsed_json: Path
     normalize_method: str = "llm"
+    normalize_note: str | None = None
 
 
 class ParseResumeError(Exception):
@@ -891,7 +952,7 @@ def parse_resume(
     if not body.strip():
         raise ParseResumeError("简历正文为空，无法规范化或抽取字段。")
 
-    normalized, normalize_method = normalize_resume_body(
+    normalized, normalize_method, normalize_note = normalize_resume_body(
         body,
         assessor=normalize_assessor,
         allow_rules_fallback=allow_rules_fallback,
@@ -954,6 +1015,7 @@ def parse_resume(
         },
         "method": {
             "normalize": normalize_method,
+            "normalize_note": normalize_note,
             "fields": "llm" if parse_assessor is None else "injected",
         },
     }
@@ -971,4 +1033,5 @@ def parse_resume(
         parsed_md=parsed_md,
         parsed_json=parsed_json,
         normalize_method=normalize_method,
+        normalize_note=normalize_note,
     )
