@@ -12,7 +12,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from employ_guard.judge_resume import JudgeResumeError, resolve_resume_text
+from employ_guard.judge_resume import (
+    JudgeResumeError,
+    prefer_normalized_body,
+    resolve_resume_text,
+)
 from employ_guard.llm import LLMError, chat_completion
 
 DEFAULT_SCOPE = "通用技术面，不是针对某一企业"
@@ -683,27 +687,6 @@ def evaluate_credibility(
     return flags
 
 
-def _prefer_normalized_body(run_dir: Path, stem: str, fallback: str) -> str:
-    norm = run_dir / f"{stem}.resume.norm.md"
-    if not norm.is_file():
-        return fallback
-    raw = norm.read_text(encoding="utf-8")
-    lines = raw.splitlines()
-    if lines and lines[0].startswith("#"):
-        body_lines: list[str] = []
-        started = False
-        for line in lines[1:]:
-            if not started and line.strip().startswith(">"):
-                continue
-            if not started and not line.strip():
-                continue
-            started = True
-            body_lines.append(line)
-        text = "\n".join(body_lines).strip()
-        return text or fallback
-    return raw.strip() or fallback
-
-
 def default_projects_assessor(
     resume_text: str,
     job_description: str | None,
@@ -883,7 +866,7 @@ def review_projects(
     if not body.strip():
         raise ReviewProjectsError("简历正文为空，无法做项目审阅。")
 
-    text_for_check = _prefer_normalized_body(run_dir, stem, body)
+    text_for_check = prefer_normalized_body(run_dir, stem, body)
     assessor = projects_assessor or default_projects_assessor
     assessed = assessor(text_for_check, job_description)
     projects = list(assessed.get("projects") or [])

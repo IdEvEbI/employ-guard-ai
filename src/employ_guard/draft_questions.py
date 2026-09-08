@@ -11,7 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from employ_guard.judge_resume import JudgeResumeError, resolve_resume_text
+from employ_guard.judge_resume import (
+    JudgeResumeError,
+    prefer_normalized_body,
+    resolve_resume_text,
+)
 from employ_guard.llm import LLMError, chat_completion
 
 DEFAULT_SCOPE = "通用技术面，不是某家公司的真题"
@@ -355,8 +359,10 @@ def draft_questions(
     if not body.strip():
         raise DraftQuestionsError("简历正文为空，无法按项目出练习题。")
 
+    text_for_check = prefer_normalized_body(run_dir, stem, body)
+    used_normalized = (run_dir / f"{stem}.resume.norm.md").is_file()
     assessor = questions_assessor or default_questions_assessor
-    assessed = assessor(body, job_description)
+    assessed = assessor(text_for_check, job_description)
     projects = list(assessed.get("projects") or [])
     if not projects:
         raise DraftQuestionsError("未得到任何按项目练习题。")
@@ -377,7 +383,8 @@ def draft_questions(
         "disclaimer": DISCLAIMER,
         "standard": "docs/01-product/001_prd_就业守护助手产品说明.md#46",
         "input": source_label,
-        "text_sha256": _sha256_text(body),
+        "text_sha256": _sha256_text(text_for_check),
+        "used_normalized": used_normalized,
         "projects": projects,
         "targets": {
             "basics_per_project": BASICS_TARGET,
