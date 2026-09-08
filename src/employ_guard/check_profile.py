@@ -13,6 +13,7 @@ from typing import Any
 
 from employ_guard.judge_resume import (
     JudgeResumeError,
+    has_homepage_role_phrase,
     prefer_normalized_body,
     resolve_resume_text,
 )
@@ -43,19 +44,22 @@ SYSTEM_PROMPT = """你是就业辅导场景的「基础信息 / 首页岗位类�
 
 ## 书面口径（003 S1 / 004 C1）
 - **必须**：首页基本信息（页眉 / 基本信息区 / 求职意向行附近）出现岗位类表述，例如：智能体开发工程师、算法工程师、大模型应用工程师、大模型工程师、NLP 算法工程师。
-- **不强制**出现「应聘岗位」「求职意向」这几个字。
-- 仅靠项目经历或技能堆砌反推、首页看不出投什么岗 → **未过本项**（status=fail）。
-- 有岗位类表述，但与全文主业明显拧着（例如首页写前端、正文全是 RAG/Agent）→ **存疑**（status=doubtful）。
-- 有清晰岗位类表述且与主业大致同向 → **过本项**（status=pass）。
+- **不强制**出现「应聘岗位」「求职意向」这几个字；但岗位类表述本身必须出现在上述首页区域。
+- **不算过本项**（必须 status=fail）：
+  - 仅工作经历抬头里的在职岗位名（如「某某公司 · 算法工程师 · 2024.09-…」）；
+  - 仅项目经历、技能堆砌或全文主业反推；
+  - 仅靠已抽取字段 / parsed 里的 target_role，而首页正文没有岗位类表述。
+- 首页有岗位类表述，但与全文主业明显拧着（例如首页写前端、正文全是 RAG/Agent）→ **存疑**（status=doubtful）。
+- 首页有清晰岗位类表述且与主业大致同向 → **过本项**（status=pass）。
 
 ## 输出字段（必须齐全）
 {
   "status": "pass|fail|doubtful",
-  "target_role": "从首页读到的岗位类表述；没有则 null",
-  "homepage_evidence": "一两句：依据哪一行/哪一段判断（摘原文短句）",
+  "target_role": "从首页读到的岗位类表述；首页没有则必须 null（勿把工作经历岗位填进来冒充）",
+  "homepage_evidence": "一两句：依据首页哪一行/哪一段判断（摘原文短句）；若 fail，写明首页未见",
   "conflict_note": "若 doubtful，说明与主业如何拧着；否则 null",
   "fixes": ["可执行改法，最多 2 条；对事不对人"],
-  "notes": ["其它简短说明，可空数组"]
+  "notes": ["其它简短说明，可空数组；可将工作经历岗位名记为辅导备注，但不得因此判 pass"]
 }
 """
 
@@ -155,9 +159,53 @@ def normalize_profile_fields(data: dict[str, Any]) -> dict[str, Any]:
         fields["conflict_note"] = None
     if fields["status"] == "fail" and not fields["fixes"]:
         fields["fixes"] = [
-            "在首页基本信息写明岗位类表述（如大模型应用工程师），勿只靠项目反推。"
+            "在首页基本信息写明岗位类表述（如大模型应用工程师），勿只靠项目或工作经历岗位反推。"
         ]
     return fields
+
+
+def apply_homepage_role_gate(
+    fields: dict[str, Any],
+    resume_text: str,
+) -> tuple[dict[str, Any], bool]:
+    """规则层：首页无岗位类表述 → 强制 fail（工作经历岗位名不得顶替）。"""
+    if has_homepage_role_phrase(resume_text):
+        return fields, False
+
+    note = (
+        "首页基本信息未见岗位类表述（如大模型应用工程师、算法工程师）；"
+        "工作经历抬头中的在职岗位名、项目或技能反推均不够，须在首页写明投什么岗。"
+    )
+    work_role = _as_optional_str(fields.get("target_role"))
+    notes = list(fields.get("notes") or [])
+    if work_role:
+        tip = (
+            f"正文其它处可见「{work_role}」一类表述，但不在首页基本信息，"
+            "不能代替本项过线。"
+        )
+        if tip not in notes:
+            notes = ([tip] + notes)[:5]
+
+    fixes = list(fields.get("fixes") or [])
+    homepage_fix = (
+        "在首页基本信息或求职意向行写明岗位类表述"
+        "（如大模型应用工程师 / 算法工程师），勿只写在工作经历抬头。"
+    )
+    if not any("首页" in item for item in fixes):
+        fixes = ([homepage_fix] + fixes)[:2]
+    if not fixes:
+        fixes = [homepage_fix]
+
+    updated = {
+        **fields,
+        "status": "fail",
+        "target_role": None,
+        "homepage_evidence": note,
+        "conflict_note": None,
+        "fixes": fixes,
+        "notes": notes,
+    }
+    return updated, True
 
 
 def _load_parsed_hint(run_dir: Path, stem: str) -> dict[str, Any] | None:
@@ -192,7 +240,8 @@ def default_profile_assessor(
     if parsed_hint:
         user_parts.extend(
             [
-                "已抽取字段（仅供参考；仍以首页正文为准，勿用项目名冒充岗位）：",
+                "已抽取字段（仅供参考；仍以首页正文为准。"
+                "若 target_role 来自工作经历而非首页，不得据此判 pass）：",
                 json.dumps(parsed_hint, ensure_ascii=False),
                 "",
             ]
@@ -285,6 +334,7 @@ def check_profile(
     assessor = profile_assessor or default_profile_assessor
     raw = assessor(text_for_check, parsed_hint)
     fields = normalize_profile_fields(raw)
+    fields, rule_forced = apply_homepage_role_gate(fields, text_for_check)
 
     report_md = run_dir / f"{stem}.profile.md"
     report_json = run_dir / f"{stem}.profile.json"
@@ -314,7 +364,11 @@ def check_profile(
             "profile_json": report_json.name,
         },
         "method": {
-            "profile": "llm" if profile_assessor is None else "injected",
+            "profile": (
+                ("llm+rule" if profile_assessor is None else "injected+rule")
+                if rule_forced
+                else ("llm" if profile_assessor is None else "injected")
+            ),
         },
     }
     report_json.write_text(

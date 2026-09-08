@@ -60,6 +60,19 @@ def _fail_visual(_pages: list[Path]) -> dict:
     return data
 
 
+def _fail_writing(_text: str) -> dict:
+    return {
+        "llm_findings": [
+            {
+                "id": "W1",
+                "line": 1,
+                "excerpt": "示例",
+                "note": "错别字示例",
+            }
+        ]
+    }
+
+
 def _pass_writing(_text: str) -> dict:
     return {"llm_findings": []}
 
@@ -79,14 +92,15 @@ def _pass_content(_text: str, _job: str | None) -> dict:
 
 def _fail_content(_text: str, _job: str | None) -> dict:
     data = _pass_content(_text, _job)
-    data["pass_line"][2] = {
-        "id": "C3",
+    # C9 不在 skills/projects 汇总覆盖范围内，保证编排单测能稳定得到 content_pass=false
+    data["pass_line"][8] = {
+        "id": "C9",
         "pass": False,
         "doubtful": False,
-        "note": "缺证据",
+        "note": "工作履历无 AI 主业支撑",
         "method": "llm",
     }
-    data["main_blockers"] = ["C3：缺证据"]
+    data["main_blockers"] = ["C9：工作履历无 AI 主业支撑"]
     return data
 
 
@@ -296,6 +310,23 @@ def test_content_fail_exit_2(tmp_path: Path) -> None:
     assert result.layout_pass is True
     assert result.content_pass is False
     assert result.questions_count == 2
+
+
+def test_writing_fail_exit_2(tmp_path: Path) -> None:
+    pdf = tmp_path / "data" / "input" / "writing-fail.pdf"
+    _write_pdf(pdf)
+    result = run_resume(pdf, root=tmp_path, **_inject(writing_assessor=_fail_writing))
+    assert result.exit_code == 2
+    assert result.writing_pass is False
+    assert result.content_pass is True
+    assert result.layout_pass is True
+    assert result.brief_path is not None
+    assert "计入总出口" in result.brief_path.read_text(encoding="utf-8")
+    judge = json.loads(
+        (result.run_dir / "writing-fail.judge.json").read_text(encoding="utf-8")
+    )
+    assert judge.get("writing_pass") is False
+    assert judge.get("overall_pass") is False
 
 
 def test_skip_existing_artifacts(tmp_path: Path) -> None:
