@@ -15,7 +15,9 @@
 2. **听后做复盘**：转写现场录音 → 还原问答 → 面试评价（命令 `interview`）。
 3. **后续愿景**：知识库、模拟面试、真面试入库、企业查询（都是新工具，不作为本期必须交付）。
 
-当前里程碑是 **投前看简历 · 辅导增强**：排查增强 R7～R12 / R3b 已可用；听后做复盘暂缓；**R13 本轮跳过**。当前推进 **R14**（按项目出基础题与追问 / [#53](https://github.com/IdEvEbI/employ-guard-ai/issues/53)）。顺序见 [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) §5.1。
+当前里程碑是 **投前看简历 · 结构化链式检查**：R17～R21 已合入；听后做复盘暂缓；**R13 本轮跳过**。当前推进 **R22**（项目审阅：时间倒序 + G1-T + 结构检并挂入 `resume` / [#68](https://github.com/IdEvEbI/employ-guard-ai/issues/68)）。顺序见 [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) §5.2。
+
+`parse-resume` / `check-profile` / `check-skills` 可单独跑，**挂入完整编排见看板 R23**。`review-projects` 完整 `resume` 会跑（排查可关）。命令列表以 `uv run employ-guard --help` 与产品说明第 4 节为准。
 
 当前**不做**：全员自助门户、代写简历、用分数替代老师分批、替代按日就业台账、默认使用云端语音识别、把课评「好课标准」用到简历与面试上、为两个动作各建一个仓库。
 
@@ -64,6 +66,7 @@ uv run employ-guard read-resume <简历.pdf>
 uv run employ-guard check-writing <简历.pdf>
 uv run employ-guard judge-resume <简历.pdf>
 uv run employ-guard draft-questions <简历.pdf>
+uv run employ-guard review-projects <简历.pdf>
 uv run employ-guard resume <简历.pdf>
 uv run employ-guard resume <含PDF的目录>   # 批跑并写本地总表
 ```
@@ -74,7 +77,9 @@ uv run employ-guard resume <含PDF的目录>   # 批跑并写本地总表
 
 `draft-questions` 按主项目出基础题（考察点 + 可能追问）与深挖题（[005 技术说明](./docs/02-architecture/005_draft-questions_出练习题技术说明.md)）；`resume` 完整模式会跑本步，`--triage` / `--no-questions` 可关。
 
-`resume` 按产品说明 §5 调用上述工具（布局路径与文本路径并行）；参数可为单份 PDF 或含 PDF 的目录（批跑写 `batch-summary.md`）；已有结果且 PDF 哈希一致则跳过；`--force` 强制重跑；`--triage` 排查模式（关掉出题与查文字，写出 brief）；可用 `--no-questions` 关掉出练习题（[006 技术说明](./docs/02-architecture/006_resume_投前看简历技术说明.md)）。
+`review-projects` 按主项目给含金量 / 难度档（时间倒序、G1-T、结构缺口、P1～P8 叙事存疑；[007](./docs/02-architecture/007_review-projects_项目审阅技术说明.md) / [005 口径](./docs/04-standard/005_project-review_项目审阅口径.md)）；**不含薪资**；完整 `resume` 会跑，`--triage` 可关。
+
+`resume` 按产品说明 §5 调用上述工具（布局路径与文本路径并行；完整模式含 `review-projects`）；参数可为单份 PDF 或含 PDF 的目录（批跑写 `batch-summary.md`）；已有结果且 PDF 哈希一致则跳过；`--force` 强制重跑；`--triage` 排查模式（关掉文字表达、项目审阅与出题，写出 brief）；可用 `--no-questions` 关掉出练习题（[006 技术说明](./docs/02-architecture/006_resume_投前看简历技术说明.md)）。
 
 真实简历放在 `data/input/`，不要提交。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
 

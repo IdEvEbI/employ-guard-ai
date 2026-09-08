@@ -102,10 +102,28 @@ def _pass_questions(_text: str, _job: str | None = None) -> dict:
     }
 
 
+def _pass_projects(_text: str, _job: str | None) -> dict:
+    return {
+        "scope": "测试",
+        "summary": "ok",
+        "projects": [
+            {
+                "name": "主项目",
+                "role": "primary",
+                "value_tier": "high",
+                "difficulty_tier": "mid",
+                "structure_gaps": [],
+                "fixes": [],
+            }
+        ],
+    }
+
+
 def _inject(**kwargs):  # type: ignore[no-untyped-def]
     base = {
         "visual_assessor": _pass_visual,
         "writing_assessor": _pass_writing,
+        "projects_assessor": _pass_projects,
         "content_assessor": _pass_content,
         "questions_assessor": _pass_questions,
     }

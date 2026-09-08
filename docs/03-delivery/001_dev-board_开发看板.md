@@ -1,6 +1,6 @@
 # 开发看板
 
-- **版本**：v0.2.28
+- **版本**：v0.2.31
 - **日期**：2026-09-08
 - **产品源**：[产品说明](../01-product/001_prd_就业守护助手产品说明.md)
 - **合入方式**：[分支与合入](./002_devops-workflow_分支与合入.md)
@@ -13,10 +13,10 @@
 
 | 项         | 口径                                                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 阶段       | **投前看简历 · 结构化链式检查**（听后做复盘暂缓；R20 已合入）                                                              |
-| 当前 Issue | [#66](https://github.com/IdEvEbI/employ-guard-ai/issues/66) `feat(skills): 技能结构 / 与意向 / 与项目覆盖`（R21）          |
-| 做完的标志 | 003 §3.1a（SK1～SK6，含 001 市场摘要与排序）齐；`check-skills` 可单独跑；测试与技术说明齐全；**不**挂入 `resume`（见 R23） |
-| 现在不做   | 听后做复盘；GUI / Lang\*；R13；R16；R22～R23；不把本项写成整份不能投                                                       |
+| 阶段       | **投前看简历 · 结构化链式检查**（听后做复盘暂缓；R21 已合入）                                                              |
+| 当前 Issue | [#68](https://github.com/IdEvEbI/employ-guard-ai/issues/68) `feat(projects): 时间倒序 + G1-T + 结构检并挂入 resume`（R22） |
+| 做完的标志 | 005 v0.4（含 P1～P8）；完整 `resume` 写出 projects；排查可关；G1-T / P\* 均为存疑辅导；测试与看板 / README 尖端一致        |
+| 现在不做   | 听后做复盘；GUI / Lang\*；R13；R16；R23（parse/profile/skills 仍不挂）；不把 G1-T / P\* 升格为硬伤                         |
 
 标准正文：[04-standard](../04-standard/README.md)。老师命令：[006](../02-architecture/006_resume_投前看简历技术说明.md)。
 
@@ -105,8 +105,8 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | R18 | `feat(parse): 文本规范化与字段抽取 parsed`                | 已完成（[#59](https://github.com/IdEvEbI/employ-guard-ai/issues/59) / PR #60） | 规范化**默认 LLM**（可回退规则）；`{stem}.resume.norm` + `parsed`；性别只抽不硬伤；失败不写成不能投；可单独跑 |
 | R19 | `feat(profile): 基础信息检测（首页岗位类表述）`           | 已完成（[#62](https://github.com/IdEvEbI/employ-guard-ai/issues/62) / PR #63） | 对照新 C1；产出分项报告；不替代整份 judge                                                                     |
 | R20 | `feat(judge): 按新 C1 收紧首页岗位类表述`                 | 已完成（[#64](https://github.com/IdEvEbI/employ-guard-ai/issues/64) / PR #65） | 提示词与测试对齐 003/004；柯文类样本应能点名缺岗位表述                                                        |
-| R21 | `feat(skills): 技能结构 / 与意向 / 与项目覆盖`            | 进行中（[#66](https://github.com/IdEvEbI/employ-guard-ai/issues/66)）          | 003 §3.1a（含 SK5 对齐 001、SK6 排序）；`check-skills` 可单独跑；挂入见 R23                                   |
-| R22 | `feat(projects): 时间倒序 + G1-T + 结构检并挂入 resume`   | 待开                                                                           | 对齐 005 v0.2；近浅远深存疑；默认挂完整模式；排查可关                                                         |
+| R21 | `feat(skills): 技能结构 / 与意向 / 与项目覆盖`            | 已完成（[#66](https://github.com/IdEvEbI/employ-guard-ai/issues/66) / PR #67） | 003 §3.1a（含 SK5 对齐 001、SK6 排序）；`check-skills` 可单独跑；挂入见 R23                                   |
+| R22 | `feat(projects): 时间倒序 + G1-T + 结构检并挂入 resume`   | 进行中（[#68](https://github.com/IdEvEbI/employ-guard-ai/issues/68)）          | 对齐 005 v0.4；G1-T + P1～P8 存疑；默认挂完整模式；排查可关                                                   |
 | R23 | `feat(cli): resume 编排结构化链（layout ∥ writing）`      | 待开                                                                           | 串行文本链；并行仅 layout 与 writing；brief / 跳过哈希仍可用                                                  |
 
 顺序：R17 → R18 → R19 / R20 → R21 → R22 → R23。R16 不插队。
@@ -150,3 +150,6 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | v0.2.26 | 2026-09-07 | 开 #62 R19；看板尖端指向 `check-profile`                            |
 | v0.2.27 | 2026-09-08 | #62 / PR #63 已合入；开 #64 R20（judge C1 收紧）                    |
 | v0.2.28 | 2026-09-08 | #64 / PR #65 已合入；开 #66 R21（`check-skills`）                   |
+| v0.2.29 | 2026-09-08 | #66 / PR #67 已合入；开 #68 R22（项目审阅挂入 resume）              |
+| v0.2.30 | 2026-09-08 | R22 扩 P1～P7（005 v0.3）；仍跟踪 #68                               |
+| v0.2.31 | 2026-09-08 | R22 增 P8 项目间空窗（005 v0.4）；仍跟踪 #68                        |

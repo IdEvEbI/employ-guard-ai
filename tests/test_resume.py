@@ -118,10 +118,32 @@ def _questions(_text: str, _job: str | None) -> dict:
     }
 
 
+def _pass_projects(_text: str, _job: str | None) -> dict:
+    return {
+        "scope": "测试范围",
+        "summary": "主项目宜作练习重点。",
+        "projects": [
+            {
+                "name": "主项目",
+                "time_range": "2024.01-2025.01",
+                "role": "primary",
+                "why_selected": "测试",
+                "value_tier": "high",
+                "value_evidence": "有链路",
+                "difficulty_tier": "mid",
+                "difficulty_evidence": "有工程",
+                "structure_gaps": [],
+                "fixes": [],
+            }
+        ],
+    }
+
+
 def _inject(**kwargs):  # type: ignore[no-untyped-def]
     return {
         "visual_assessor": _pass_visual,
         "writing_assessor": _pass_writing,
+        "projects_assessor": _pass_projects,
         "content_assessor": _pass_content,
         "questions_assessor": _questions,
         **kwargs,
@@ -160,6 +182,7 @@ def test_full_pass_exit_0(tmp_path: Path) -> None:
     assert (result.run_dir / "demo.layout.json").is_file()
     assert (result.run_dir / "demo.resume.md").is_file()
     assert (result.run_dir / "demo.writing.json").is_file()
+    assert (result.run_dir / "demo.projects.json").is_file()
     assert (result.run_dir / "demo.judge.json").is_file()
     assert (result.run_dir / "demo.questions.json").is_file()
 
@@ -280,6 +303,13 @@ def test_triage_skips_writing_and_questions_writes_brief(tmp_path: Path) -> None
     result = run_resume(pdf, root=tmp_path, triage=True, **_inject())
     assert result.exit_code == 0
     assert result.triage is True
+    by_name = {s.name: s for s in result.steps}
+    assert by_name["check-writing"].status == "disabled"
+    assert by_name["review-projects"].status == "disabled"
+    assert by_name["draft-questions"].status == "disabled"
+    assert not (result.run_dir / "triage.writing.json").is_file()
+    assert not (result.run_dir / "triage.projects.json").is_file()
+    assert not (result.run_dir / "triage.questions.json").is_file()
     assert result.writing_pass is None
     assert result.questions_count is None
     writing = next(s for s in result.steps if s.name == "check-writing")
@@ -332,12 +362,12 @@ def test_progress_emits_start_and_finish(tmp_path: Path) -> None:
     assert any("正在 PDF 出图" in m for m in messages)
     assert any("正在 查排版" in m for m in messages)
     assert any("正在 判能不能投" in m for m in messages)
-    assert any("[1/6]" in m for m in messages)
-    assert any("[3/6]" in m for m in messages)
+    assert any("[1/7]" in m for m in messages)
+    assert any("[3/7]" in m for m in messages)
     assert any("· 已跑 ·" in m and "ms" in m for m in messages)
     assert all(s.elapsed_ms is not None for s in result.steps)
     # 6 steps × (start + finish)
-    assert len(messages) == 12
+    assert len(messages) == 14
 
 
 def test_cli_resume_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

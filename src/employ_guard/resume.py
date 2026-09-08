@@ -43,16 +43,22 @@ from employ_guard.pdf_to_images import (
     render_pdf_to_images,
 )
 from employ_guard.read_resume import ReadResumeError, extract_resume_text
+from employ_guard.review_projects import (
+    ProjectsAssessor,
+    ReviewProjectsError,
+    review_projects,
+)
 
 StepStatus = Literal["ran", "skipped", "failed", "disabled"]
 ProgressHook = Callable[[str], None]
 
-STEP_TOTAL = 6
+STEP_TOTAL = 7
 STEP_ORDER: tuple[str, ...] = (
     "pdf-to-images",
     "check-layout",
     "read-resume",
     "check-writing",
+    "review-projects",
     "judge-resume",
     "draft-questions",
 )
@@ -62,6 +68,7 @@ STEP_LABELS: dict[str, str] = {
     "check-layout": "查排版",
     "read-resume": "读简历",
     "check-writing": "查文字表达",
+    "review-projects": "项目审阅",
     "judge-resume": "判能不能投",
     "draft-questions": "出练习题",
 }
@@ -481,16 +488,18 @@ def _run_text_path(
     current_sha: str,
     force: bool,
     skip_writing: bool,
+    skip_projects: bool,
     skip_questions: bool,
     triage: bool,
     job_description: str | None,
     root: Path | None,
     clock: _StepClock,
     writing_assessor: WritingAssessor | None,
+    projects_assessor: ProjectsAssessor | None,
     content_assessor: ContentAssessor | None,
     questions_assessor: QuestionsAssessor | None,
 ) -> _PathBundle:
-    """抽文本 → 查文字表达 → 判能不能投 → 按项目出练习题。"""
+    """抽文本 → 查文字表达 → 项目审阅 → 判能不能投 → 按项目出练习题。"""
     bundle = _PathBundle()
 
     def _add(outcome: StepOutcome, started: float) -> None:
@@ -610,6 +619,72 @@ def _run_text_path(
                     status="ran",
                     detail=detail,
                     path=writing.report_md,
+                ),
+                t0,
+            )
+
+    t0 = clock.start("review-projects")
+    projects_json = run_dir / f"{stem}.projects.json"
+    if skip_projects:
+        _add(
+            StepOutcome(
+                name="review-projects",
+                status="disabled",
+                detail="排查模式未做项目审阅",
+            ),
+            t0,
+        )
+    else:
+        can_skip_projects = (
+            not force
+            and not text_reran
+            and projects_json.is_file()
+            and _resume_text_match_pdf(run_dir, stem, current_sha)
+        )
+        if can_skip_projects:
+            _add(
+                StepOutcome(
+                    name="review-projects",
+                    status="skipped",
+                    detail="已有项目审阅（PDF 哈希一致）",
+                    path=run_dir / f"{stem}.projects.md",
+                ),
+                t0,
+            )
+        else:
+            had_projects = projects_json.is_file()
+            try:
+                reviewed = review_projects(
+                    pdf_path,
+                    job_description=job_description,
+                    root=root,
+                    projects_assessor=projects_assessor,
+                )
+            except ReviewProjectsError as exc:
+                _add(
+                    StepOutcome(
+                        name="review-projects",
+                        status="failed",
+                        detail=str(exc),
+                    ),
+                    t0,
+                )
+                bundle.hard_error = str(exc)
+                return bundle
+            g1t = "近浅远深存疑" if reviewed.g1t_doubtful else "G1-T 符合期望"
+            base = f"{reviewed.project_count} 个主项目 · {g1t}"
+            if force and had_projects:
+                detail = f"强制重跑，{base}"
+            elif had_projects:
+                detail = f"PDF 已变更，重新审阅（{base}）"
+            else:
+                detail = base
+            _add(
+                StepOutcome(
+                    name="review-projects",
+                    status="ran",
+                    detail=detail,
+                    path=reviewed.report_md,
                 ),
                 t0,
             )
@@ -771,6 +846,7 @@ def run_resume(
     visual_assessor: VisualAssessor | None = None,
     writing_assessor: WritingAssessor | None = None,
     content_assessor: ContentAssessor | None = None,
+    projects_assessor: ProjectsAssessor | None = None,
     questions_assessor: QuestionsAssessor | None = None,
 ) -> ResumeRunResult:
     """布局路径与文本路径并行；已有结果且 PDF 哈希一致则跳过。"""
@@ -784,6 +860,7 @@ def run_resume(
 
     skip_questions = skip_questions or triage
     skip_writing = triage
+    skip_projects = triage
 
     run_dir = output_run_dir(pdf_path, root=root)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -813,12 +890,14 @@ def run_resume(
             current_sha=current_sha,
             force=force,
             skip_writing=skip_writing,
+            skip_projects=skip_projects,
             skip_questions=skip_questions,
             triage=triage,
             job_description=job_description,
             root=root,
             clock=clock,
             writing_assessor=writing_assessor,
+            projects_assessor=projects_assessor,
             content_assessor=content_assessor,
             questions_assessor=questions_assessor,
         )

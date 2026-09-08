@@ -16,6 +16,13 @@ from employ_guard.review_projects import (
     ReviewProjectsError,
     _normalize_projects,
     _normalize_tier,
+    career_window_start,
+    duration_months,
+    evaluate_credibility,
+    evaluate_g1t,
+    gap_months,
+    intervals_overlap,
+    parse_project_interval,
     review_projects,
 )
 
@@ -49,6 +56,7 @@ def _fake_assessor(_text: str, job: str | None) -> dict:
                 "value_evidence": "写清了检索、重排与评测对比。",
                 "difficulty_tier": "mid",
                 "difficulty_evidence": "有链路但工程落地写得较少。",
+                "structure_gaps": [],
                 "fixes": ["补一条失败降级怎么做。"],
             }
         ],
@@ -107,8 +115,186 @@ def test_review_from_resume_md(tmp_path: Path) -> None:
     assert data["includes_salary"] is False
     assert data["judges_content"] is False
     assert data["not_in_triage_by_default"] is True
-    assert data["not_in_resume_by_default"] is True
+    assert data["in_resume_full_mode"] is True
+    assert data["g1t_doubtful"] is False
     assert result.report_md.name.endswith(".projects.md")
+    assert "G1-T" in report
+
+
+def test_evaluate_g1t_near_shallow_far_deep() -> None:
+    doubtful, note = evaluate_g1t(
+        [
+            {"name": "近", "value_tier": "low"},
+            {"name": "远", "value_tier": "high"},
+        ]
+    )
+    assert doubtful is True
+    assert "近浅远深" in note
+
+
+def test_evaluate_g1t_ok_when_near_not_lower() -> None:
+    doubtful, _note = evaluate_g1t(
+        [
+            {"name": "近", "value_tier": "high"},
+            {"name": "远", "value_tier": "mid"},
+        ]
+    )
+    assert doubtful is False
+
+
+def test_parse_duration_and_overlap() -> None:
+    interval = parse_project_interval(time_range="2025.04-2025.05")
+    assert interval is not None
+    assert duration_months(interval) == 1
+    a = parse_project_interval(time_range="2024.01-2024.06")
+    b = parse_project_interval(time_range="2024.05-2024.08")
+    c = parse_project_interval(time_range="2024.07-2024.12")
+    assert a and b and c
+    assert intervals_overlap(a, b) is True
+    assert intervals_overlap(a, c) is False
+
+
+def test_evaluate_credibility_p2_p4_p5() -> None:
+    short = {
+        "name": "短项目",
+        "category": "work",
+        "claims_lead": True,
+        "name_too_generic": False,
+        "employer": "甲公司",
+        "_interval": ((2025, 4), (2025, 5)),
+    }
+    p_a = {
+        "name": "A",
+        "category": "work",
+        "claims_lead": True,
+        "name_too_generic": False,
+        "employer": "甲公司",
+        "_interval": ((2024, 1), (2024, 8)),
+    }
+    p_b = {
+        "name": "B",
+        "category": "work",
+        "claims_lead": True,
+        "name_too_generic": False,
+        "employer": "甲公司",
+        "_interval": ((2024, 6), (2024, 12)),
+    }
+    p_c = {
+        "name": "C",
+        "category": "work",
+        "claims_lead": True,
+        "name_too_generic": False,
+        "employer": "甲公司",
+        "_interval": ((2024, 10), (2025, 3)),
+    }
+    flags = evaluate_credibility(
+        [short, p_a, p_b, p_c],
+        {"work_years": 1.5, "target_role": "", "work_spans": [], "education_spans": []},
+    )
+    codes = {f.code for f in flags}
+    assert "P2" in codes
+    assert "P4" in codes
+    assert "P5" in codes
+
+
+def test_evaluate_credibility_p1_generic_name() -> None:
+    projects = _normalize_projects(
+        {
+            "projects": [
+                {
+                    "name": "健康管家",
+                    "value_tier": "mid",
+                    "difficulty_tier": "mid",
+                    "name_too_generic": True,
+                }
+            ]
+        }
+    )
+    flags = evaluate_credibility(
+        projects,
+        {"work_years": None, "target_role": "", "work_spans": [], "education_spans": []},
+    )
+    assert any(f.code == "P1" for f in flags)
+
+
+def test_evaluate_credibility_p8_gap_after_graduation() -> None:
+    edu = [
+        {
+            "label": "本科",
+            "start_ym": "2018-09",
+            "end_ym": "2022-06",
+            "_interval": ((2018, 9), (2022, 6)),
+        }
+    ]
+    work = [
+        {
+            "label": "甲公司",
+            "start_ym": "2022-07",
+            "end_ym": "2025-06",
+            "_interval": ((2022, 7), (2025, 6)),
+        }
+    ]
+    assert career_window_start(work, edu) == (2022, 6)
+    assert gap_months((2023, 3), (2023, 6)) == 3
+    projects = [
+        {
+            "name": "课设",
+            "category": "course",
+            "claims_lead": False,
+            "name_too_generic": False,
+            "_interval": ((2021, 1), (2021, 6)),
+        },
+        {
+            "name": "项目甲",
+            "category": "work",
+            "claims_lead": False,
+            "name_too_generic": False,
+            "_interval": ((2022, 7), (2023, 3)),
+        },
+        {
+            "name": "项目乙",
+            "category": "work",
+            "claims_lead": False,
+            "name_too_generic": False,
+            "_interval": ((2023, 6), (2024, 1)),
+        },
+    ]
+    flags = evaluate_credibility(
+        projects,
+        {
+            "work_years": 2,
+            "target_role": "",
+            "work_spans": work,
+            "education_spans": edu,
+        },
+    )
+    assert any(f.code == "P8" for f in flags)
+    # 在校期相邻空窗不因 P8 触发（课设不入轴）
+    school_only = evaluate_credibility(
+        [
+            {
+                "name": "课设A",
+                "category": "course",
+                "claims_lead": False,
+                "name_too_generic": False,
+                "_interval": ((2020, 1), (2020, 3)),
+            },
+            {
+                "name": "课设B",
+                "category": "course",
+                "claims_lead": False,
+                "name_too_generic": False,
+                "_interval": ((2021, 1), (2021, 6)),
+            },
+        ],
+        {
+            "work_years": None,
+            "target_role": "",
+            "work_spans": work,
+            "education_spans": edu,
+        },
+    )
+    assert not any(f.code == "P8" for f in school_only)
 
 
 def test_review_from_pdf_after_read_resume(tmp_path: Path) -> None:

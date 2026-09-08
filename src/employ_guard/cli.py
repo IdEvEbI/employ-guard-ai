@@ -545,7 +545,7 @@ def resume_cmd(
     triage: bool = typer.Option(
         False,
         "--triage",
-        help="排查模式：关掉按项目出练习题与查文字表达，并写出短教练摘要。",
+        help="排查模式：关掉查文字表达、项目审阅与按项目出练习题，并写出短教练摘要。",
     ),
     force: bool = typer.Option(
         False,
