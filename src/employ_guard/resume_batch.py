@@ -228,6 +228,15 @@ def run_resume_batch(
                 )
             )
             continue
+        except Exception as exc:  # noqa: BLE001 — 单份未预期异常不得打断整批
+            result.rows.append(
+                BatchRow(
+                    pdf_path=pdf.resolve(),
+                    exit_code=1,
+                    hard_error=f"未预期失败：{exc}",
+                )
+            )
+            continue
 
         result.rows.append(
             BatchRow(

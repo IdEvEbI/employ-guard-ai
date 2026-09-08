@@ -259,3 +259,33 @@ def test_cli_resume_batch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert result.exit_code == 0, result.output
     assert "本地总表" in result.stdout
     assert "批跑份数：2" in result.stdout
+
+
+def test_batch_timeout_on_one_file_continues_and_writes_summary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    folder = tmp_path / "data" / "input" / "timeout-batch"
+    _write_pdf(folder / "boom.pdf")
+    _write_pdf(folder / "ok.pdf")
+
+    from employ_guard.resume import run_resume as real_run_resume
+
+    def _gated(pdf: Path, **kwargs):  # type: ignore[no-untyped-def]
+        if pdf.name == "boom.pdf":
+            raise TimeoutError("The read operation timed out")
+        return real_run_resume(pdf, **kwargs)
+
+    monkeypatch.setattr("employ_guard.resume_batch.run_resume", _gated)
+    result = run_resume_batch(folder, root=tmp_path, triage=True, **_inject())
+    assert len(result.rows) == 2
+    by_name = {row.pdf_path.name: row for row in result.rows}
+    assert by_name["boom.pdf"].exit_code == 1
+    assert "timed out" in (by_name["boom.pdf"].hard_error or "")
+    assert by_name["ok.pdf"].exit_code == 0
+    assert result.summary_md is not None and result.summary_md.is_file()
+    assert result.summary_json is not None and result.summary_json.is_file()
+    assert result.exit_code == 1
+    body = result.summary_md.read_text(encoding="utf-8")
+    assert "boom.pdf" in body
+    assert "ok.pdf" in body
