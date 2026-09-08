@@ -17,7 +17,7 @@
 | 结论   | 总评 `pass` / `fail` / `doubtful`（由分项推导：任一 fail → fail；否则任一 doubtful → doubtful）       |
 | 输出   | `{stem}.skills.md` / `{stem}.skills.json`                                                             |
 | 终端   | 打印本项结论与岗位意向；**退出码 0**（写出即可）；失败说明原因退出码 `1`                              |
-| 编排   | **可单独跑**；挂入 `resume` 见看板 R23；**不替代** `judge-resume`                                     |
+| 编排   | **可单独跑**；**完整 `resume` 默认挂入**；`--triage` 可关；**不替代** `judge-resume`                  |
 | 不做   | 不评排版；不把本项写成整份不能投；不改 judge C8 提示词大面；不以 C/D 类训推 Infra 为应用岗硬门槛      |
 
 ## 2. 检查怎么实现

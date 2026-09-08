@@ -8,9 +8,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from employ_guard.check_layout import VisualAssessor
+from employ_guard.check_profile import ProfileAssessor
+from employ_guard.check_skills import SkillsAssessor
 from employ_guard.check_writing import WritingAssessor
 from employ_guard.draft_questions import QuestionsAssessor
 from employ_guard.judge_resume import ContentAssessor
+from employ_guard.parse_resume import NormalizeAssessor, ParseAssessor
 from employ_guard.paths import (
     DEFAULT_INPUT_DIR,
     DEFAULT_OUTPUT_DIR,
@@ -164,7 +167,11 @@ def run_resume_batch(
     progress: ProgressHook | None = None,
     file_progress: Callable[[int, int, Path], None] | None = None,
     visual_assessor: VisualAssessor | None = None,
+    normalize_assessor: NormalizeAssessor | None = None,
+    parse_assessor: ParseAssessor | None = None,
+    profile_assessor: ProfileAssessor | None = None,
     writing_assessor: WritingAssessor | None = None,
+    skills_assessor: SkillsAssessor | None = None,
     projects_assessor: ProjectsAssessor | None = None,
     content_assessor: ContentAssessor | None = None,
     questions_assessor: QuestionsAssessor | None = None,
@@ -203,7 +210,11 @@ def run_resume_batch(
                 root=root,
                 progress=progress,
                 visual_assessor=visual_assessor,
+                normalize_assessor=normalize_assessor,
+                parse_assessor=parse_assessor,
+                profile_assessor=profile_assessor,
                 writing_assessor=writing_assessor,
+                skills_assessor=skills_assessor,
                 projects_assessor=projects_assessor,
                 content_assessor=content_assessor,
                 questions_assessor=questions_assessor,
