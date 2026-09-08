@@ -1,6 +1,6 @@
 # 开发看板
 
-- **版本**：v0.2.35
+- **版本**：v0.2.36
 - **日期**：2026-09-08
 - **产品源**：[产品说明](../01-product/001_prd_就业守护助手产品说明.md)
 - **合入方式**：[分支与合入](./002_devops-workflow_分支与合入.md)
@@ -11,12 +11,12 @@
 
 ## 1. 当前只做什么
 
-| 项         | 口径                                                                                                                                                                    |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 阶段       | **投前看简历 · 结构化链式检查**（听后做复盘暂缓；R24 已合入）                                                                                                           |
-| 当前 Issue | [#74](https://github.com/IdEvEbI/employ-guard-ai/issues/74) `feat(judge): 汇总前置分项 + 时间检测（再 LLM 补缺口）`（R25）                                              |
-| 做完的标志 | profile 赢 C1（且 profile 自身收紧：工作岗位不得顶替首页）；C3/C8 映射 skills+projects；layout/writing 进 judge 与总出口；时间检测汇总；006 / 003 / PRD；测试与尖端一致 |
-| 现在不做   | 听后做复盘；GUI / Lang\*；R13；R16；**R26 brief**（R25 合入后再开）                                                                                                     |
+| 项         | 口径                                                                                                            |
+| ---------- | --------------------------------------------------------------------------------------------------------------- |
+| 阶段       | **投前看简历 · 结构化链式检查**（听后做复盘暂缓；R25 已合入）                                                   |
+| 当前 Issue | [#76](https://github.com/IdEvEbI/employ-guard-ai/issues/76) `feat(resume): brief 提炼全部存疑与不达标项`（R26） |
+| 做完的标志 | brief 按源汇总未过/存疑（不逐条抄 writing）；建议先改 ≤3；`write-brief` 可单独重写；006 / PRD；测试与尖端一致   |
+| 现在不做   | 听后做复盘；GUI / Lang\*；R13；R16                                                                              |
 
 标准正文：[04-standard](../04-standard/README.md)。老师命令：[006](../02-architecture/006_resume_投前看简历技术说明.md)。
 
@@ -109,8 +109,8 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | R22 | `feat(projects): 时间倒序 + G1-T + 结构检并挂入 resume`   | 已完成（[#68](https://github.com/IdEvEbI/employ-guard-ai/issues/68) / PR #69） | 对齐 005 v0.4；G1-T + P1～P8 存疑；默认挂完整模式；排查可关                                                   |
 | R23 | `feat(cli): resume 编排结构化链（layout ∥ writing）`      | 已完成（[#70](https://github.com/IdEvEbI/employ-guard-ai/issues/70) / PR #71） | 串行文本链；并行布局 ∥ 文本；挂入 parse / profile / skills；brief / 跳过哈希仍可用                            |
 | R24 | `feat(resume): parse 之后文本步一律基于 resume.norm.md`   | 已完成（[#72](https://github.com/IdEvEbI/employ-guard-ai/issues/72) / PR #73） | writing / judge / questions 与分项同口径；公共 prefer；无 norm 回退抽出正文                                   |
-| R25 | `feat(judge): 汇总前置分项 + 时间检测（再 LLM 补缺口）`   | 进行中（[#74](https://github.com/IdEvEbI/employ-guard-ai/issues/74)）          | 见下方「R25 已锁口径」                                                                                        |
-| R26 | `feat(resume): brief 提炼全部存疑与不达标项`              | 待开（**R25 合入后**）                                                         | 从汇总后的 judge + 分项提炼；仍建议先改 ≤N 条；不替代分项全文                                                 |
+| R25 | `feat(judge): 汇总前置分项 + 时间检测（再 LLM 补缺口）`   | 已完成（[#74](https://github.com/IdEvEbI/employ-guard-ai/issues/74) / PR #75） | profile 赢 C1；C3/C8 映射；layout/writing 进报告与总出口；时间检测汇总                                        |
+| R26 | `feat(resume): brief 提炼全部存疑与不达标项`              | 进行中（[#76](https://github.com/IdEvEbI/employ-guard-ai/issues/76)）          | 从汇总后的 judge + 分项提炼全部未过/存疑；建议先改 ≤3；不替代分项全文                                         |
 
 顺序：R17 → R18 → R19 / R20 → R21 → R22 → R23 → R24 → R25 → R26。R16 不插队。
 
@@ -169,3 +169,4 @@ GitHub 的 Issue 与 Pull Request 共用编号，因此没有 #2、#4、#6 这�
 | v0.2.33 | 2026-09-08 | #70 / PR #71 已合入；开 #72 R24（一律 norm）；下一件 R25 brief 待开 |
 | v0.2.34 | 2026-09-08 | 锁 R25=judge 汇总（含时间）→ R26=brief；R24 仍进行中                |
 | v0.2.35 | 2026-09-08 | #72 / PR #73 已合入；开 #74 R25（judge 汇总前置分项 + 时间检测）    |
+| v0.2.36 | 2026-09-08 | #74 / PR #75 已合入；开 #76 R26（brief 全部存疑与不达标一览）       |

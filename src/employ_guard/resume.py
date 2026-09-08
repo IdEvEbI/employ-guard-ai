@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -227,6 +228,9 @@ def _read_json(path: Path) -> dict[str, Any]:
     return data
 
 
+BRIEF_ACTION_LIMIT = 3
+
+
 def _pass_label(value: bool | None, *, skipped: str = "未查") -> str:
     if value is True:
         return "达标"
@@ -235,13 +239,165 @@ def _pass_label(value: bool | None, *, skipped: str = "未查") -> str:
     return skipped
 
 
-def _collect_actions(run_dir: Path, stem: str, *, limit: int = 3) -> list[str]:
-    """从排版 / 内容报告收集可执行改法，最多 limit 条。"""
+def _shorten(text: str, *, max_len: int = 160) -> str:
+    text = re.sub(r"\s+", " ", str(text or "").strip())
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+@dataclass
+class BriefInventory:
+    """教练摘要用的未过 / 存疑一览（按源汇总，不逐条抄分项全文）。"""
+
+    fails: list[str] = field(default_factory=list)
+    doubts: list[str] = field(default_factory=list)
+
+
+def collect_brief_inventory(run_dir: Path, stem: str) -> BriefInventory:
+    """从汇总 judge + 分项 JSON 提炼未过与存疑（短条目，去重）。"""
+    inv = BriefInventory()
+    seen_fail: set[str] = set()
+    seen_doubt: set[str] = set()
+
+    def add_fail(note: str) -> None:
+        text = _shorten(note, max_len=140)
+        if not text or text in seen_fail:
+            return
+        seen_fail.add(text)
+        inv.fails.append(text)
+
+    def add_doubt(note: str) -> None:
+        text = _shorten(note, max_len=140)
+        if not text or text in seen_doubt or text in seen_fail:
+            return
+        seen_doubt.add(text)
+        inv.doubts.append(text)
+
+    has_judge = (run_dir / f"{stem}.judge.json").is_file()
+
+    layout_json = run_dir / f"{stem}.layout.json"
+    if layout_json.is_file():
+        data = _read_json(layout_json)
+        if data.get("layout_pass") is False:
+            codes: list[str] = []
+            first_note = ""
+            for item in data.get("pass_line") or []:
+                if isinstance(item, dict) and not item.get("pass"):
+                    codes.append(str(item.get("id") or "?"))
+                    if not first_note:
+                        first_note = str(item.get("note") or "")
+            if codes:
+                add_fail(
+                    f"排版未达标（{'、'.join(codes)}）"
+                    + (f"：{first_note}" if first_note else "")
+                    + "；详见 layout"
+                )
+            else:
+                add_fail("排版未达标；详见 layout")
+
+    writing_json = run_dir / f"{stem}.writing.json"
+    if writing_json.is_file():
+        data = _read_json(writing_json)
+        if data.get("writing_pass") is False:
+            findings = data.get("findings") or []
+            if isinstance(findings, list) and findings:
+                counts: dict[str, int] = {}
+                for item in findings:
+                    if not isinstance(item, dict):
+                        continue
+                    code = str(item.get("id") or "W?")
+                    counts[code] = counts.get(code, 0) + 1
+                breakdown = "、".join(
+                    f"{code}×{counts[code]}" for code in sorted(counts)
+                )
+                add_fail(
+                    f"文字表达：有待改进 {len(findings)} 条（{breakdown}）；详见 writing"
+                )
+            else:
+                add_fail("文字表达：有待改进；详见 writing")
+
+    judge_json = run_dir / f"{stem}.judge.json"
+    if has_judge:
+        data = _read_json(judge_json)
+        for item in data.get("pass_line") or []:
+            if not isinstance(item, dict):
+                continue
+            code = item.get("id") or "?"
+            note = str(item.get("note") or "")
+            if not item.get("pass"):
+                # 汇总长文只留要点前半；完整句见 judge
+                if note.startswith("汇总自"):
+                    add_fail(f"内容 {code}：未过；详见 judge / 对应分项")
+                else:
+                    add_fail(f"内容 {code}：{note or '未过'}")
+            elif item.get("doubtful"):
+                if (
+                    note.startswith("汇总自")
+                    or note.startswith("时间检测")
+                    or len(note) > 80
+                ):
+                    add_doubt(f"内容 {code}：存疑；详见 judge")
+                else:
+                    add_doubt(f"内容 {code}：{note or '存疑'}")
+        # 时间已写入 C7 存疑时不再单列，避免与 judge 时间章重复
+        c7_doubt = any(
+            isinstance(item, dict)
+            and item.get("id") == "C7"
+            and item.get("doubtful")
+            for item in (data.get("pass_line") or [])
+        )
+        if not c7_doubt:
+            for line in data.get("time_summary") or []:
+                text = str(line).strip()
+                if text and "未发现规则层时间硬伤" not in text:
+                    add_doubt(f"时间检测：{text}")
+        return inv
+
+    # 无 judge 时（如排查中途）：才直接读分项
+    profile_json = run_dir / f"{stem}.profile.json"
+    if profile_json.is_file():
+        data = _read_json(profile_json)
+        status = str(data.get("status") or "").lower()
+        evidence = data.get("homepage_evidence") or data.get("target_role") or ""
+        if status == "fail":
+            add_fail(f"基础信息（C1）：未过 — {evidence or '首页未见岗位类表述'}")
+        elif status == "doubtful":
+            add_doubt(
+                f"基础信息（C1）：存疑 — {data.get('conflict_note') or evidence}"
+            )
+
+    skills_json = run_dir / f"{stem}.skills.json"
+    if skills_json.is_file():
+        data = _read_json(skills_json)
+        status = str(data.get("status") or "").lower()
+        if status == "fail":
+            add_fail("技能结构：未过；详见 skills")
+        elif status == "doubtful":
+            add_doubt("技能结构：存疑；详见 skills")
+
+    projects_json = run_dir / f"{stem}.projects.json"
+    if projects_json.is_file():
+        data = _read_json(projects_json)
+        codes = []
+        for flag in data.get("credibility_flags") or []:
+            if isinstance(flag, dict) and flag.get("code"):
+                codes.append(str(flag.get("code")))
+        if codes:
+            add_doubt(
+                f"项目审阅存疑（{'、'.join(dict.fromkeys(codes))}）；详见 projects"
+            )
+
+    return inv
+
+
+def _collect_actions(run_dir: Path, stem: str, *, limit: int = BRIEF_ACTION_LIMIT) -> list[str]:
+    """建议先改：优先未过合格线，最多 limit 条。"""
     tips: list[str] = []
     seen: set[str] = set()
 
     def _add(note: str) -> None:
-        text = note.strip()
+        text = _shorten(note, max_len=120)
         if not text or text in seen:
             return
         seen.add(text)
@@ -253,41 +409,58 @@ def _collect_actions(run_dir: Path, stem: str, *, limit: int = 3) -> list[str]:
         if not data.get("layout_pass"):
             for tip in data.get("revision_tips") or []:
                 _add(str(tip))
+                if len(tips) >= limit:
+                    return tips[:limit]
             for item in data.get("pass_line") or []:
                 if isinstance(item, dict) and not item.get("pass"):
-                    code = item.get("id") or "?"
-                    note = item.get("note") or "见排版报告"
-                    _add(f"排版 {code}：{note}")
+                    _add(f"排版 {item.get('id') or '?'}：{item.get('note') or '见 layout'}")
+                    if len(tips) >= limit:
+                        return tips[:limit]
 
     judge_json = run_dir / f"{stem}.judge.json"
     if judge_json.is_file():
         data = _read_json(judge_json)
         if not data.get("content_pass"):
-            for note in data.get("main_blockers") or []:
-                _add(str(note))
             for item in data.get("pass_line") or []:
                 if isinstance(item, dict) and not item.get("pass"):
                     code = item.get("id") or "?"
-                    note = item.get("note") or "见内容报告"
-                    _add(f"内容 {code}：{note}")
+                    _add(f"内容 {code}：{item.get('note') or '见 judge'}")
+                    if len(tips) >= limit:
+                        return tips[:limit]
 
     writing_json = run_dir / f"{stem}.writing.json"
-    if writing_json.is_file():
+    if writing_json.is_file() and len(tips) < limit:
         data = _read_json(writing_json)
         if data.get("writing_pass") is False:
             findings = data.get("findings") or []
-            if isinstance(findings, list) and findings:
-                first = findings[0] if isinstance(findings[0], dict) else {}
-                note = first.get("note") or first.get("excerpt") or "见文字表达报告"
-                _add(f"文字表达：{note}")
+            n = len(findings) if isinstance(findings, list) else 0
+            if n:
+                _add(f"文字表达：有待改进 {n} 条，见 writing 报告")
             else:
-                _add("文字表达：有待改进项，见 writing 报告")
+                _add("文字表达：有待改进，见 writing 报告")
+
+    profile_json = run_dir / f"{stem}.profile.json"
+    if profile_json.is_file() and len(tips) < limit:
+        data = _read_json(profile_json)
+        if str(data.get("status") or "").lower() == "fail":
+            fixes = data.get("fixes") or []
+            if fixes:
+                _add(f"基础信息：{fixes[0]}")
+            else:
+                _add("基础信息：在首页写明岗位类表述。")
+
+    if len(tips) < limit:
+        inv = collect_brief_inventory(run_dir, stem)
+        for note in inv.doubts:
+            if len(tips) >= limit:
+                break
+            _add(note)
 
     return tips[:limit]
 
 
 def write_brief(result: ResumeRunResult) -> Path:
-    """写出短教练摘要；不合并合格线口径。"""
+    """写出教练摘要：总览 + 建议先改 ≤N + 按源汇总的未过/存疑一览。"""
     stem = result.pdf_path.stem
     path = result.run_dir / f"{stem}.brief.md"
     if result.triage and result.writing_pass is None:
@@ -299,38 +472,78 @@ def write_brief(result: ResumeRunResult) -> Path:
     else:
         writing_line = "未得到结论"
 
+    overall = "过合格线" if result.exit_code == 0 else (
+        "硬失败（不得据此写成不能投）" if result.exit_code == 1 else "未过合格线"
+    )
+    inventory = collect_brief_inventory(result.run_dir, stem)
+
     lines = [
         "# 投前看简历 · 教练摘要",
         "",
         f"- 输入：`{result.pdf_path.name}`",
         f"- 模式：{'排查（triage）' if result.triage else '完整'}",
+        f"- 总览：{overall}",
         f"- 排版：{_pass_label(result.layout_pass)}",
         f"- 内容：{_pass_label(result.content_pass)}",
         f"- 文字表达：{writing_line}",
         "",
-        "## 建议先改（最多 3 条）",
+        f"## 建议先改（最多 {BRIEF_ACTION_LIMIT} 条）",
         "",
     ]
     if result.actions:
         for tip in result.actions:
             lines.append(f"- {tip}")
     else:
-        if result.layout_pass and result.content_pass and result.writing_pass is not False:
-            lines.append("- 排版、文字表达与内容均过合格线；可按详细报告微调水平线项。")
+        if (
+            result.layout_pass
+            and result.content_pass
+            and result.writing_pass is not False
+            and result.exit_code == 0
+        ):
+            lines.append(
+                "- 排版、文字表达与内容均过合格线；可按详细报告微调水平线项。"
+            )
         else:
-            lines.append("- 见下方详细报告中的未过项。")
+            lines.append("- 见下方「未过与存疑一览」与详细报告。")
+
+    lines.extend(["", "## 未过与存疑一览", ""])
+    lines.append("### 未过")
+    lines.append("")
+    if inventory.fails:
+        for note in inventory.fails:
+            lines.append(f"- {note}")
+    else:
+        lines.append("- （无）")
+    lines.append("")
+    lines.append("### 存疑（不自动等同未过合格线）")
+    lines.append("")
+    if inventory.doubts:
+        for note in inventory.doubts:
+            lines.append(f"- {note}")
+    else:
+        lines.append("- （无）")
+    lines.append("")
+    lines.append(
+        "> 一览按源汇总，不逐条抄 writing / 分项原文；细节见下方链接。"
+    )
+    lines.append("")
 
     lines.extend(
         [
-            "",
             "## 详细报告",
             "",
             f"- 排版：`{stem}.layout.md`",
             f"- 内容：`{stem}.judge.md`",
         ]
     )
-    if result.writing_pass is not None:
-        lines.append(f"- 文字表达：`{stem}.writing.md`")
+    for label, name in (
+        ("基础信息", f"{stem}.profile.md"),
+        ("技能结构", f"{stem}.skills.md"),
+        ("项目审阅", f"{stem}.projects.md"),
+        ("文字表达", f"{stem}.writing.md"),
+    ):
+        if (result.run_dir / name).is_file():
+            lines.append(f"- {label}：`{name}`")
     if result.questions_count is not None:
         lines.append(
             f"- 练习题：`{stem}.questions.md`（{result.questions_count} 道，按项目推测）"
@@ -340,6 +553,90 @@ def write_brief(result: ResumeRunResult) -> Path:
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
+
+
+def rewrite_brief_from_artifacts(
+    source: Path,
+    *,
+    root: Path | None = None,
+    triage: bool = False,
+) -> Path:
+    """只根据已有 JSON 重写 brief，不重跑评价。"""
+    from employ_guard.paths import output_run_dir, resolve_input_file
+
+    path = source.expanduser()
+    if path.is_dir():
+        run_dir = path.resolve()
+        judges = sorted(run_dir.glob("*.judge.json"))
+        layouts = sorted(run_dir.glob("*.layout.json"))
+        marker = judges[0] if judges else (layouts[0] if layouts else None)
+        if marker is None:
+            raise ResumeError(
+                f"目录内没有 judge/layout 产物，无法写 brief：{run_dir}"
+            )
+        stem = marker.name.split(".", 1)[0]
+        pdf_name = f"{stem}.pdf"
+    else:
+        pdf = resolve_input_file(path, input_root=None)
+        if pdf.suffix.lower() != ".pdf":
+            # 也允许直接给某份 *.judge.json
+            if pdf.name.endswith(".judge.json") or pdf.name.endswith(".layout.json"):
+                run_dir = pdf.parent
+                stem = pdf.name.split(".", 1)[0]
+                pdf_name = f"{stem}.pdf"
+            else:
+                raise ResumeError("write-brief 请给 PDF、输出目录，或已有 *.judge.json。")
+        else:
+            run_dir = output_run_dir(pdf, root=root)
+            stem = pdf.stem
+            pdf_name = pdf.name
+
+    layout_pass: bool | None = None
+    writing_pass: bool | None = None
+    content_pass: bool | None = None
+    questions_count: int | None = None
+
+    layout_json = run_dir / f"{stem}.layout.json"
+    if layout_json.is_file():
+        layout_pass = bool(_read_json(layout_json).get("layout_pass"))
+    writing_json = run_dir / f"{stem}.writing.json"
+    if writing_json.is_file():
+        writing_pass = bool(_read_json(writing_json).get("writing_pass"))
+    elif triage:
+        writing_pass = None
+    judge_json = run_dir / f"{stem}.judge.json"
+    if judge_json.is_file():
+        content_pass = bool(_read_json(judge_json).get("content_pass"))
+    questions_json = run_dir / f"{stem}.questions.json"
+    if questions_json.is_file():
+        qdata = _read_json(questions_json)
+        questions_count = int(qdata.get("question_count") or 0) or None
+        if questions_count is None:
+            projects = qdata.get("projects") or []
+            if isinstance(projects, list):
+                n = 0
+                for proj in projects:
+                    if isinstance(proj, dict):
+                        n += len(proj.get("basics") or [])
+                        n += len(proj.get("deep_dives") or [])
+                questions_count = n or None
+
+    exit_code = 0
+    if layout_pass is False or writing_pass is False or content_pass is False:
+        exit_code = 2
+
+    result = ResumeRunResult(
+        pdf_path=Path(pdf_name),
+        run_dir=run_dir,
+        layout_pass=layout_pass,
+        writing_pass=writing_pass,
+        content_pass=content_pass,
+        questions_count=questions_count,
+        exit_code=exit_code,
+        triage=triage,
+        actions=_collect_actions(run_dir, stem),
+    )
+    return write_brief(result)
 
 
 def _load_layout_from_disk(run_dir: Path, stem: str) -> tuple[bool, Path]:

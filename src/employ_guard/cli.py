@@ -21,7 +21,7 @@ from employ_guard.paths import resolve_input_path
 from employ_guard.parse_resume import ParseResumeError, parse_resume
 from employ_guard.check_profile import CheckProfileError, check_profile
 from employ_guard.check_skills import CheckSkillsError, check_skills
-from employ_guard.resume import ResumeError, run_resume
+from employ_guard.resume import ResumeError, rewrite_brief_from_artifacts, run_resume
 from employ_guard.resume_batch import run_resume_batch
 from employ_guard.review_projects import ReviewProjectsError, review_projects
 
@@ -525,6 +525,27 @@ def _print_single_resume_result(result, *, triage: bool, no_questions: bool) -> 
         fg=typer.colors.GREEN,
         bold=True,
     )
+
+
+@app.command("write-brief")
+def write_brief_cmd(
+    source: Path = typer.Argument(
+        ...,
+        help="已跑过的输出目录、投递 PDF，或某份 *.judge.json。只重写 brief，不重跑评价。",
+    ),
+    triage: bool = typer.Option(
+        False,
+        "--triage",
+        help="按排查模式标注（文字表达未查）。",
+    ),
+) -> None:
+    """根据已有产物重写教练摘要。不调用大模型，不重跑各检查步。"""
+    try:
+        path = rewrite_brief_from_artifacts(source, triage=triage)
+    except ResumeError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"已写出教练摘要：{path}")
 
 
 @app.command("resume")
