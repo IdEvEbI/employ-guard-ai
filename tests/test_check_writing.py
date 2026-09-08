@@ -11,7 +11,9 @@ from typer.testing import CliRunner
 
 from employ_guard.check_writing import (
     CheckWritingError,
+    _parse_llm_writing_payload,
     check_writing,
+    default_writing_assessor,
     rule_check_english_punctuation,
     rule_check_list_punctuation,
 )
@@ -205,3 +207,43 @@ def test_cli_findings_exit_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     result = runner.invoke(app, ["check-writing", str(md)])
     assert result.exit_code == 0, result.output
     assert "有待改进" in result.stdout
+
+
+def test_parse_llm_writing_payload_bad_json_raises_readable() -> None:
+    with pytest.raises(CheckWritingError, match="合法 JSON|无法解析"):
+        _parse_llm_writing_payload('{"typos": [{"excerpt": "截断",}]}')
+
+
+def test_default_assessor_degrades_on_bad_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _bad(**kwargs):  # type: ignore[no-untyped-def]
+        return '{"typos": [{"excerpt": "截断'
+
+    monkeypatch.setattr("employ_guard.check_writing.chat_completion", _bad)
+    monkeypatch.setattr("employ_guard.check_writing.time.sleep", lambda _s: None)
+    assessed = default_writing_assessor("一行正文")
+    assert assessed["llm_degraded"] is True
+    assert assessed["llm_findings"] == []
+    assert assessed["llm_error"]
+
+
+def test_check_writing_degraded_still_writes_rule_findings(tmp_path: Path) -> None:
+    md = tmp_path / "long.resume.md"
+    md.write_text(
+        "专业技能\n"
+        "熟练掌握 Python\n熟练使用 RAG\n熟练运用 Agent\n"
+        "熟练掌握 Docker\n熟练使用 Git\n",
+        encoding="utf-8",
+    )
+
+    def _degraded(_text: str) -> dict:
+        return {
+            "llm_findings": [],
+            "llm_degraded": True,
+            "llm_error": "Expecting ',' delimiter",
+        }
+
+    result = check_writing(md, root=tmp_path, writing_assessor=_degraded)
+    data = json.loads(result.report_json.read_text(encoding="utf-8"))
+    assert data["llm_degraded"] is True
+    assert "仅含规则层" in result.report_md.read_text(encoding="utf-8")
+    assert any(item.get("id") == "W4" for item in result.findings)
