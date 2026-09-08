@@ -1035,6 +1035,7 @@ def _run_text_path(
                     writing_assessor=writing_assessor,
                 )
             except CheckWritingError as exc:
+                # 无简历文本等输入问题仍硬失败；LLM 降级已在 check_writing 内消化。
                 _add(
                     StepOutcome(name="check-writing", status="failed", detail=str(exc)),
                     t0,
@@ -1047,6 +1048,9 @@ def _run_text_path(
                 if writing.writing_pass
                 else f"有待改进项 {len(writing.findings)} 条"
             )
+            writing_data = _read_json(writing.report_json)
+            if writing_data.get("llm_degraded"):
+                base = f"{base}（LLM 降级，仅规则层）"
             if force and had_writing:
                 detail = f"强制重跑，{base}"
             elif had_writing:

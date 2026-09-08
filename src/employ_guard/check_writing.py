@@ -45,16 +45,17 @@ EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
 URL_RE = re.compile(r"https?://\S+|www\.\S+")
 DECIMAL_RE = re.compile(r"\d+\.\d+")
 EN_PUNCT_RE = re.compile(r"[,\.;:!\?]")
-WRITING_MAX_TOKENS = 4096
+WRITING_MAX_TOKENS = 8192
+WRITING_LLM_ITEM_CAP = 25
 WRITING_ATTEMPT_STRATEGIES: tuple[dict[str, object], ...] = (
     {"json_object": True, "user_suffix": ""},
     {
         "json_object": True,
-        "user_suffix": "\n\n请只输出一个合法 json 对象，不要 Markdown 围栏。",
+        "user_suffix": "\n\n请只输出一个合法 json 对象，不要 Markdown 围栏。条数须遵守上限。",
     },
     {
         "json_object": False,
-        "user_suffix": "\n\n请只输出一个合法 json 对象，不要 Markdown 围栏。",
+        "user_suffix": "\n\n请只输出一个合法 json 对象，不要 Markdown 围栏。条数须遵守上限。",
     },
 )
 
@@ -70,6 +71,10 @@ SYSTEM_PROMPT = """你是简历文字表达校对员。只检查错别字与用�
     {"line": 20, "excerpt": "原文短句", "issue": "问题类型", "suggestion": "改写方向", "note": "说明"}
   ]
 }
+
+## 条数上限（重要）
+- typos 与 colloquial **合计最多 25 条**；同类重复只保留代表性几条，其余在 note 里写「另有多处同类，见全文」。
+- excerpt / note / suggestion 各尽量短（一两句），避免超长 JSON 被截断。
 
 ## W1 错别字
 - 列出疑似错字、别字、输入法联想错误；专有名词（LangGraph、Milvus、DeepSeek 等）与常见技术栈不要误报。
@@ -393,13 +398,21 @@ def _parse_llm_writing_payload(text: str) -> dict[str, Any]:
         stripped = fence.group(1).strip()
     try:
         data = json.loads(stripped)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as first_exc:
         start = stripped.find("{")
         end = stripped.rfind("}")
-        if start >= 0 and end > start:
+        if start < 0 or end <= start:
+            raise CheckWritingError(
+                f"LLM 结果不是合法 JSON：{stripped[:400]}"
+            ) from first_exc
+        try:
             data = json.loads(stripped[start : end + 1])
-        else:
-            raise CheckWritingError(f"LLM 结果不是合法 JSON：{stripped[:400]}") from None
+        except json.JSONDecodeError as second_exc:
+            raise CheckWritingError(
+                "LLM 返回的 JSON 无法解析"
+                f"（{second_exc.msg}；约第 {second_exc.lineno} 行）。"
+                "常见原因是输出被截断或字段内未转义引号。"
+            ) from second_exc
     if not isinstance(data, dict):
         raise CheckWritingError("LLM 结果须为 JSON 对象。")
     return data
@@ -455,18 +468,20 @@ def _normalize_llm_findings(data: dict[str, Any]) -> list[dict[str, Any]]:
                 "method": "llm",
             }
         )
+    if len(findings) > WRITING_LLM_ITEM_CAP:
+        findings = findings[:WRITING_LLM_ITEM_CAP]
     return findings
 
 
 def default_writing_assessor(resume_text: str) -> dict[str, Any]:
-    """把简历正文发给 LLM，解析 W1 / W4。"""
+    """把简历正文发给 LLM，解析 W1 / W4；失败时回退为空 LLM 结果。"""
     user_text = "\n".join(
         [
             "以下是简历正文（行号已标注，供你填写 line 字段）。",
             "",
             *_numbered_lines(resume_text),
             "",
-            "请严格按系统说明只输出 json 对象。",
+            f"请严格按系统说明只输出 json 对象；typos+colloquial 合计最多 {WRITING_LLM_ITEM_CAP} 条。",
         ]
     )
     last_error: CheckWritingError | None = None
@@ -480,7 +495,11 @@ def default_writing_assessor(resume_text: str) -> dict[str, Any]:
                 max_tokens=WRITING_MAX_TOKENS,
             )
             parsed = _parse_llm_writing_payload(text)
-            return {"llm_findings": _normalize_llm_findings(parsed)}
+            return {
+                "llm_findings": _normalize_llm_findings(parsed),
+                "llm_degraded": False,
+                "llm_error": None,
+            }
         except (LLMError, CheckWritingError, json.JSONDecodeError) as exc:
             last_error = (
                 exc
@@ -490,15 +509,36 @@ def default_writing_assessor(resume_text: str) -> dict[str, Any]:
             if attempt < len(WRITING_ATTEMPT_STRATEGIES):
                 time.sleep(float(attempt))
                 continue
-            raise last_error from exc
-    raise CheckWritingError("查文字表达失败。")
+            return {
+                "llm_findings": [],
+                "llm_degraded": True,
+                "llm_error": str(last_error),
+            }
+    return {
+        "llm_findings": [],
+        "llm_degraded": True,
+        "llm_error": "查文字表达 LLM 失败。",
+    }
 
 
 def _numbered_lines(text: str) -> list[str]:
     return [f"{index:04d} | {line}" for index, line in enumerate(text.splitlines(), start=1)]
 
 
-def _markdown_report(*, writing_pass: bool, findings: list[dict[str, Any]]) -> str:
+def _shorten_error(message: str | None, *, max_len: int = 160) -> str:
+    text = re.sub(r"\s+", " ", str(message or "").strip())
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def _markdown_report(
+    *,
+    writing_pass: bool,
+    findings: list[dict[str, Any]],
+    llm_degraded: bool = False,
+    llm_error: str | None = None,
+) -> str:
     verdict = "未发现明显文字问题" if writing_pass else "有待改进的文字表达项"
     lines = [
         "# 查文字表达",
@@ -508,6 +548,12 @@ def _markdown_report(*, writing_pass: bool, findings: list[dict[str, Any]]) -> s
         f"**结论**：{verdict}",
         "",
     ]
+    if llm_degraded:
+        lines.append(
+            "**说明**：大模型校对未写入（JSON 解析失败或接口异常），本报告仅含规则层项"
+            + (f"；原因：{_shorten_error(llm_error)}" if llm_error else "。")
+        )
+        lines.append("")
     if not findings:
         lines.append("未发现 W1～W4 范围内的明显问题。")
         lines.append("")
@@ -564,12 +610,22 @@ def check_writing(
     assessor = writing_assessor or default_writing_assessor
     assessed = assessor(text_for_check)
     findings.extend(list(assessed.get("llm_findings") or []))
+    llm_degraded = bool(assessed.get("llm_degraded"))
+    llm_error = (
+        str(assessed.get("llm_error") or "").strip() or None
+        if llm_degraded
+        else None
+    )
 
     writing_pass = len(findings) == 0
     md_name = f"{stem}.writing.md"
     json_name = f"{stem}.writing.json"
     report_md = run_dir / md_name
     report_json = run_dir / json_name
+    if writing_assessor is None:
+        w1_w4_method = "llm-degraded" if llm_degraded else "llm"
+    else:
+        w1_w4_method = "injected"
     record = {
         "tool": "check-writing",
         "evaluates_content_bar": False,
@@ -579,6 +635,8 @@ def check_writing(
         "input": source_label,
         "text_sha256": _sha256_text(text_for_check),
         "used_normalized": used_normalized,
+        "llm_degraded": llm_degraded,
+        "llm_error": llm_error,
         "findings": findings,
         "summary": {
             code: sum(1 for item in findings if item.get("id") == code)
@@ -586,11 +644,16 @@ def check_writing(
         },
         "method": {
             "W2_W3_long": "rule",
-            "W1_W4": "llm" if writing_assessor is None else "injected",
+            "W1_W4": w1_w4_method,
         },
     }
     report_md.write_text(
-        _markdown_report(writing_pass=writing_pass, findings=findings),
+        _markdown_report(
+            writing_pass=writing_pass,
+            findings=findings,
+            llm_degraded=llm_degraded,
+            llm_error=llm_error,
+        ),
         encoding="utf-8",
     )
     report_json.write_text(
