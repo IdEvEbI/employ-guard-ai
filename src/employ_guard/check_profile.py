@@ -11,7 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from employ_guard.judge_resume import JudgeResumeError, resolve_resume_text
+from employ_guard.judge_resume import (
+    JudgeResumeError,
+    prefer_normalized_body,
+    resolve_resume_text,
+)
 from employ_guard.llm import LLMError, chat_completion
 
 DISCLAIMER = (
@@ -174,27 +178,6 @@ def _load_parsed_hint(run_dir: Path, stem: str) -> dict[str, Any] | None:
     }
 
 
-def _prefer_normalized_body(run_dir: Path, stem: str, fallback: str) -> str:
-    norm = run_dir / f"{stem}.resume.norm.md"
-    if not norm.is_file():
-        return fallback
-    raw = norm.read_text(encoding="utf-8")
-    # 去掉本仓产物说明头
-    lines = raw.splitlines()
-    if lines and lines[0].startswith("#"):
-        body_lines: list[str] = []
-        started = False
-        for line in lines[1:]:
-            if not started and line.strip().startswith(">"):
-                continue
-            if not started and not line.strip():
-                continue
-            started = True
-            body_lines.append(line)
-        text = "\n".join(body_lines).strip()
-        return text or fallback
-    return raw.strip() or fallback
-
 
 def default_profile_assessor(
     resume_text: str, parsed_hint: dict[str, Any] | None
@@ -296,7 +279,7 @@ def check_profile(
     if not body.strip():
         raise CheckProfileError("简历正文为空，无法做基础信息检测。")
 
-    text_for_check = _prefer_normalized_body(run_dir, stem, body)
+    text_for_check = prefer_normalized_body(run_dir, stem, body)
     parsed_hint = _load_parsed_hint(run_dir, stem)
 
     assessor = profile_assessor or default_profile_assessor

@@ -11,7 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from employ_guard.judge_resume import JudgeResumeError, resolve_resume_text
+from employ_guard.judge_resume import (
+    JudgeResumeError,
+    prefer_normalized_body,
+    resolve_resume_text,
+)
 from employ_guard.llm import LLMError, chat_completion
 
 WRITING_CATEGORIES = ("W1", "W2", "W3", "W4")
@@ -547,7 +551,9 @@ def check_writing(
     if not body.strip():
         raise CheckWritingError("简历正文为空，无法查文字表达。")
 
-    lines = body.splitlines()
+    text_for_check = prefer_normalized_body(run_dir, stem, body)
+    used_normalized = (run_dir / f"{stem}.resume.norm.md").is_file()
+    lines = text_for_check.splitlines()
     findings = (
         rule_check_list_punctuation(lines)
         + rule_check_english_punctuation(lines)
@@ -556,7 +562,7 @@ def check_writing(
     )
 
     assessor = writing_assessor or default_writing_assessor
-    assessed = assessor(body)
+    assessed = assessor(text_for_check)
     findings.extend(list(assessed.get("llm_findings") or []))
 
     writing_pass = len(findings) == 0
@@ -571,7 +577,8 @@ def check_writing(
         "writing_pass": writing_pass,
         "standard": "docs/04-standard/003_resume-standard_简历书写标准.md#35",
         "input": source_label,
-        "text_sha256": _sha256_text(body),
+        "text_sha256": _sha256_text(text_for_check),
+        "used_normalized": used_normalized,
         "findings": findings,
         "summary": {
             code: sum(1 for item in findings if item.get("id") == code)

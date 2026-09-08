@@ -1,6 +1,6 @@
 # 投前看简历（resume）技术说明
 
-- **版本**：v0.12
+- **版本**：v0.13
 - **日期**：2026-09-08
 - **对应命令**：`employ-guard resume`
 - **产品**：[产品说明 §5](../01-product/001_prd_就业守护助手产品说明.md)
@@ -13,6 +13,7 @@
 | 做什么 | 老师一条命令跑完；墙钟上 `(出图→查排版) ∥ (抽文本→规范化/抽取→基础信息→文字→技能→项目审阅→判断→题)`            |
 | 批跑   | 目录下一层 `.pdf`（默认非递归）；逐份调用同一套 `run_resume`；写出本地 `batch-summary.md` / `.json`            |
 | 抽文本 | 优先 PDF 文字层；**整份文字层为空**时 `read-resume` 内 OCR（tesseract）；失败退出码 `1`，不得写成「不能投」    |
+| 正文源 | **parse 之后**各文本评价步一律优先 `{stem}.resume.norm.md`（有则用；无则回退抽出正文）；layout 仍看页图        |
 | 跳过   | 对应结果已存在 **且** 输入 PDF 的 sha256 与记录一致时才跳过                                                    |
 | 强制   | `--force` 忽略已有产物，各步重跑                                                                               |
 | 排查   | `--triage`：关掉查文字、技能检、项目审阅、出练习题；**仍跑** parse / profile；写出短 `{stem}.brief.md`         |
@@ -67,6 +68,7 @@ uv run employ-guard resume <含PDF的目录> [--triage] [--force]
 
 口径：
 
+- **parse 之后**文本评价步（profile / writing / skills / projects / judge / questions）一律优先 `resume.norm.md`；公共函数 `prefer_normalized_body`；JSON 记 `used_normalized`。
 - 首页基本信息须有岗位类表述（003 S1 / 004 C1）；不强制「应聘岗位」四字。
 - 性别等只抽取、缺不硬伤；`parse_incomplete` 不得写成不能投。
 - 近段含金量不得明显低于远段 → 存疑 / 辅导（005 G1-T）；P\* 同理，默认不自动等同不能投。
@@ -80,3 +82,4 @@ uv run employ-guard resume <含PDF的目录> [--triage] [--force]
 | v0.10 | 2026-09-08 | 注明 check-skills 可单独跑；挂入见 R23                           |
 | v0.11 | 2026-09-08 | 完整模式挂入 review-projects；排查可关；步骤改为 7 步            |
 | v0.12 | 2026-09-08 | R23：挂入 parse / profile / skills；现行顺序升格；步骤改为 10 步 |
+| v0.13 | 2026-09-08 | R24：parse 后文本步一律优先 resume.norm.md                       |

@@ -19,6 +19,7 @@ from employ_guard.judge_resume import (
     apply_c1_homepage_role_fail,
     find_future_end_dates,
     has_homepage_role_phrase,
+    prefer_normalized_body,
     _parse_json_object,
     default_content_assessor,
     judge_resume,
@@ -68,6 +69,55 @@ def _fail_assessor(_text: str, _job: str | None) -> dict:
     }
     data["main_blockers"] = ["C3：缺 Agent 可追问证据"]
     return data
+
+
+def test_prefer_normalized_body_strips_header(tmp_path: Path) -> None:
+    stem = "demo"
+    (tmp_path / f"{stem}.resume.norm.md").write_text(
+        "# 简历文本（规范化）\n\n> 说明行\n\n求职意向：大模型工程师\n正文一行\n",
+        encoding="utf-8",
+    )
+    text = prefer_normalized_body(tmp_path, stem, "fallback")
+    assert "求职意向：大模型工程师" in text
+    assert "说明行" not in text
+    assert "fallback" not in text
+    assert prefer_normalized_body(tmp_path, "missing", "fallback") == "fallback"
+
+
+def test_judge_uses_normalized_when_present(tmp_path: Path) -> None:
+    md = tmp_path / "normed.resume.md"
+    md.write_text(
+        "# 简历文本\n\n姓名：测\n只有姓名没有岗位\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "normed.resume.norm.md").write_text(
+        "# 简历文本（规范化）\n\n> x\n\n求职意向：大模型工程师\n姓名：测\n",
+        encoding="utf-8",
+    )
+
+    def _assessor(text: str, _job: str | None) -> dict:
+        assert "求职意向：大模型工程师" in text
+        pass_line = [
+            {
+                "id": f"C{i}",
+                "pass": True,
+                "doubtful": False,
+                "note": "ok",
+                "method": "llm",
+            }
+            for i in range(1, 10)
+        ]
+        return {
+            "scope": "测试",
+            "pass_line": pass_line,
+            "level_line": [],
+            "main_blockers": [],
+        }
+
+    result = judge_resume(md, root=tmp_path, content_assessor=_assessor)
+    assert result.content_pass is True
+    data = json.loads(result.report_json.read_text(encoding="utf-8"))
+    assert data["used_normalized"] is True
 
 
 def test_parse_json_with_fence_and_prose() -> None:

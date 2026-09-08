@@ -202,6 +202,31 @@ def resolve_resume_text(
     )
 
 
+def prefer_normalized_body(run_dir: Path, stem: str, fallback: str) -> str:
+    """优先使用 `{stem}.resume.norm.md` 正文；无文件或空则回退 fallback。
+
+    parse 之后各文本评价步须统一走本函数，避免有的读 norm、有的读抽出原文。
+    """
+    norm = run_dir / f"{stem}.resume.norm.md"
+    if not norm.is_file():
+        return fallback
+    raw = norm.read_text(encoding="utf-8")
+    lines = raw.splitlines()
+    if lines and lines[0].startswith("#"):
+        body_lines: list[str] = []
+        started = False
+        for line in lines[1:]:
+            if not started and line.strip().startswith(">"):
+                continue
+            if not started and not line.strip():
+                continue
+            started = True
+            body_lines.append(line)
+        text = "\n".join(body_lines).strip()
+        return text or fallback
+    return raw.strip() or fallback
+
+
 def find_future_end_dates(
     resume_text: str,
     *,
@@ -896,22 +921,25 @@ def judge_resume(
     if not body.strip():
         raise JudgeResumeError("简历正文为空，无法判断能不能投。")
 
+    text_for_check = prefer_normalized_body(run_dir, stem, body)
+    used_normalized = (run_dir / f"{stem}.resume.norm.md").is_file()
+
     assessor = content_assessor or default_content_assessor
-    assessed = assessor(body, job_description)
+    assessed = assessor(text_for_check, job_description)
     pass_line = apply_c1_homepage_role_fail(
         apply_credibility_doubts(
             apply_future_date_doubts(
                 list(assessed.get("pass_line") or []),
-                body,
+                text_for_check,
                 today=today,
             ),
-            body,
+            text_for_check,
         ),
-        body,
+        text_for_check,
     )
     level_line = refine_level_line(
         list(assessed.get("level_line") or []),
-        body,
+        text_for_check,
         pass_line,
     )
     scope = str(assessed.get("scope") or DEFAULT_SCOPE)
@@ -944,7 +972,8 @@ def judge_resume(
         "scope": scope,
         "standard": "docs/04-standard/004_resume-bar_简历合格线.md#2",
         "input": source_label,
-        "text_sha256": _sha256_text(body),
+        "text_sha256": _sha256_text(text_for_check),
+        "used_normalized": used_normalized,
         "checked_on": (today or date.today()).isoformat(),
         "pass_line": pass_line,
         "level_line": level_line,
