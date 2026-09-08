@@ -16,10 +16,14 @@ from employ_guard.resume_batch import list_resume_pdfs, run_resume_batch
 runner = CliRunner()
 
 
-def _write_pdf(path: Path, text: str = "Resume body") -> None:
+def _write_pdf(
+    path: Path,
+    text: str = "求职意向：大模型工程师\nAgent RAG project",
+) -> None:
+    """夹具 PDF 须含首页岗位类表述，否则 C1 规则层会把注入的 content_pass 打回。"""
     document = pymupdf.open()
     page = document.new_page(width=595, height=842)
-    page.insert_text((72, 72), text, fontsize=14)
+    page.insert_text((72, 72), text, fontsize=14, fontname="china-s")
     path.parent.mkdir(parents=True, exist_ok=True)
     document.save(path)
     document.close()
@@ -129,8 +133,8 @@ def test_batch_empty_dir_raises(tmp_path: Path) -> None:
 
 def test_batch_writes_summary_exit_0(tmp_path: Path) -> None:
     folder = tmp_path / "data" / "input" / "class-a"
-    _write_pdf(folder / "one.pdf", "Agent RAG")
-    _write_pdf(folder / "two.pdf", "Agent RAG")
+    _write_pdf(folder / "one.pdf")
+    _write_pdf(folder / "two.pdf")
     result = run_resume_batch(folder, root=tmp_path, triage=True, **_inject())
     assert result.exit_code == 0
     assert len(result.rows) == 2

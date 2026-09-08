@@ -16,10 +16,15 @@ from employ_guard.resume import STEP_ORDER, ResumeError, run_resume
 runner = CliRunner()
 
 
-def _write_pdf(path: Path, text: str = "Resume body") -> None:
+def _write_pdf(
+    path: Path,
+    text: str = "求职意向：大模型工程师\nAgent RAG project",
+) -> None:
+    """夹具 PDF 须含首页岗位类表述，否则 C1 规则层会把注入的 content_pass 打回。"""
     document = pymupdf.open()
     page = document.new_page(width=595, height=842)
-    page.insert_text((72, 72), text, fontsize=14)
+    # china-s：内置中文字体，避免默认拉丁字体丢汉字导致 C1 误伤编排单测
+    page.insert_text((72, 72), text, fontsize=14, fontname="china-s")
     path.parent.mkdir(parents=True, exist_ok=True)
     document.save(path)
     document.close()
@@ -141,7 +146,7 @@ def test_rejects_non_pdf(tmp_path: Path) -> None:
 
 def test_full_pass_exit_0(tmp_path: Path) -> None:
     pdf = tmp_path / "data" / "input" / "demo.pdf"
-    _write_pdf(pdf, "Agent RAG project")
+    _write_pdf(pdf)
     result = run_resume(pdf, root=tmp_path, **_inject())
     assert result.exit_code == 0
     assert result.layout_pass is True
@@ -235,14 +240,14 @@ def test_force_reruns_even_when_hash_matches(tmp_path: Path) -> None:
 
 def test_pdf_change_invalidates_skip(tmp_path: Path) -> None:
     pdf = tmp_path / "data" / "input" / "changed.pdf"
-    _write_pdf(pdf, "version-one")
+    _write_pdf(pdf, "求职意向：大模型工程师\nversion-one")
     first = run_resume(pdf, root=tmp_path, **_inject())
     assert all(s.status == "ran" for s in first.steps)
     from employ_guard.resume import _sha256_file
 
     old_sha = _sha256_file(pdf)
 
-    _write_pdf(pdf, "version-two-changed-content")
+    _write_pdf(pdf, "求职意向：大模型工程师\nversion-two-changed-content")
     new_sha = _sha256_file(pdf)
     assert old_sha != new_sha
 
