@@ -20,6 +20,16 @@ uv run employ-guard resume data/input/某份简历.pdf
 uv run employ-guard resume data/input/某目录 --triage
 ```
 
+若手头只有 Word 原稿：
+
+```bash
+uv run employ-guard word-to-pdf data/input/某份简历.docx
+# 默认在同目录写出 .pdf，再：
+uv run employ-guard resume data/input/某份简历.pdf
+```
+
+需要 LibreOffice（推荐 `brew install --cask libreoffice`）或 macOS 上的 Microsoft Word；`check` 会提示转换器是否可用。
+
 报告在 `data/output/`。排版结论与内容结论分开看；`brief` / `batch-summary` 只做本机阅读入口。
 
 **`--triage`（排查模式）少跑哪些：**
@@ -35,7 +45,7 @@ uv run employ-guard resume data/input/某目录 --triage
 
 ## 3. 注意
 
-- 本期输入必须是 PDF；不是 PDF 会直接失败并说明。
+- 检查输入必须是 PDF；不是 PDF 会直接失败并说明。只有 Word 时先跑 `word-to-pdf`。
 - **扫描件 / 纯图 PDF**：`read-resume` 在文字层为空时用本机 tesseract OCR；未安装时该步失败并说明（不等于「不能投」）。数字 PDF 不需要。安装：`brew install tesseract tesseract-lang`。
 - 听后做复盘（`interview`）暂缓；缺 ffmpeg 不影响简历侧。
 - 更多命令与口径见仓库根 [README](../../README.md) 与 [产品说明](../01-product/001_prd_就业守护助手产品说明.md)。

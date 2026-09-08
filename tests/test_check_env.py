@@ -36,6 +36,23 @@ def test_run_env_check_passes_with_key_and_env(tmp_path: Path, monkeypatch) -> N
     assert "不打印密钥" in by_name["LLM_API_KEY"].detail
 
 
+def test_run_env_check_reports_word_converter_optional(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / ".env").write_text("LLM_API_KEY=test-key-not-real\n", encoding="utf-8")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setattr("employ_guard.check_env.find_soffice", lambda: None)
+    monkeypatch.setattr("employ_guard.check_env.msword_available", lambda: False)
+    result = run_env_check(root=tmp_path)
+    by_name = {item.name: item for item in result.items}
+    item = by_name["word-to-pdf 转换器"]
+    assert item.required is False
+    assert item.ok is True  # 可选提示，不阻断 check
+    assert "未找到" in item.detail
+    assert result.exit_code == 0
+
+
 def test_cli_check_exit_1_without_key(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(
         "employ_guard.cli.run_env_check",
