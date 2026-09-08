@@ -53,7 +53,7 @@ SYSTEM_PROMPT = """你是简历「内容」检查员。只根据简历文本判�
 {
   "scope": "评价范围说明（无岗位说明时用：通用大模型应用 / 应用算法面初筛，非针对某一企业）",
   "pass_line": [
-    {"id": "C1", "pass": true, "doubtful": false, "note": "求职方向可辨为大模型应用。"},
+    {"id": "C1", "pass": true, "doubtful": false, "note": "首页基本信息有岗位类表述「大模型应用工程师」。"},
     {"id": "C2", "pass": true, "doubtful": false, "note": "提供手机与邮箱，可联系。"},
     ... C3 到 C9 同样结构；存疑时 doubtful 为 true，note 只写人话 ...
   ],
@@ -65,7 +65,7 @@ SYSTEM_PROMPT = """你是简历「内容」检查员。只根据简历文本判�
 }
 
 ## 内容合格线（任一 pass=false → 内容未合格；doubtful 不自动判未合格）
-- C1 岗位方向可辨：全文能判断为大模型应用或应用算法；不强制「求职意向」字段。
+- C1 首页岗位类表述可辨：**首页基本信息**（页眉 / 基本信息区 / 求职意向行附近）须出现岗位类表述（如智能体开发工程师、算法工程师、大模型应用工程师、大模型工程师）。不强制「应聘岗位 / 求职意向」四字。仅靠项目经历或技能堆砌反推、首页看不出投什么岗 → **pass=false**。有表述但与全文主业明显拧着 → pass=true 且 doubtful=true。
 - C2 可联系：有可用手机或邮箱至少一项；不因 QQ 邮箱判不合格。
 - C3 算法+RAG+Agent 证据齐全：须同时具备三类可追问证据——① 算法/模型（微调、Prompt、eval/Harness 等）；② RAG（链路至少两段，非仅向量库名词）；③ Agent（规划、Tool/MCP、记忆、降级等且写明本人职责）。缺一类 → pass=false。
 - C4 至少 1 个可追问项目：含背景/问题、职责、技术。
@@ -86,7 +86,7 @@ SYSTEM_PROMPT = """你是简历「内容」检查员。只根据简历文本判�
 ## 内容水平线（仅当全部 C 项 pass=true 时认真填写；level 必须是 high/mid/low）
 **禁止「沾边即 high」**。拿不准时优先给 mid，不要给 high。对照：
 - H1 履历相关度：
-  - 高：求职意向 / 近段岗位名与目标方向一致（如都写「大模型应用开发」），且主业即 AI 交付。
+  - 高：首页岗位类表述 / 近段岗位名与目标方向一致（如都写「大模型应用开发」），且主业即 AI 交付。
   - 中：工作是 AI，但意向与项目职称拧着或偏泛（例：意向「算法」、项目写「后端研发」；或只写泛「后端」）。
   - 低：非 AI 经历占首页主视觉，或岗位与项目方向明显拧着。
 - H2 链路完整度：高=主项目闭环且职责在链上；中=有环节串不成闭环；低=仅框架名。
@@ -378,6 +378,93 @@ def _merge_pass_doubt(
             }
         )
     return updated
+
+
+_HOMEPAGE_SECTION_END = re.compile(
+    r"(?:##\s*)?(?:专业技能|个人优势|相关技能|技能清单|"
+    r"工作经历|工作经验|项目经历|项目经验|教育背景|教育经历|自我评价)"
+)
+_ROLE_LABEL = re.compile(
+    r"(?:求职意向|应聘岗位|应聘职位|目标岗位|意向岗位)\s*[：:]"
+)
+_ROLE_PHRASE = re.compile(
+    r"(?:"
+    r"智能体(?:开发)?工程师"
+    r"|大模型(?:应用)?(?:开发)?工程师"
+    r"|算法工程师"
+    r"|NLP\s*算法工程师"
+    r"|机器学习工程师"
+    r"|深度学习工程师"
+    r"|AI\s*(?:应用)?(?:开发)?工程师"
+    r"|应用开发工程师"
+    r")"
+)
+
+
+def homepage_basic_info_text(resume_text: str) -> str:
+    """截取首页 / 基本信息区，供 C1 规则判断。"""
+    text = resume_text.strip()
+    basic = re.search(
+        r"(?:##\s*)?(?:基本信息|基础信息|个人信息)\s*\n([\s\S]+?)(?=\n##\s|\n(?:专业技能|工作|项目|教育)|$)",
+        text,
+    )
+    if basic:
+        return basic.group(1).strip()[:1500]
+    end = _HOMEPAGE_SECTION_END.search(text)
+    head = text[: end.start()] if end else text[:1200]
+    return head.strip()[:1500]
+
+
+def has_homepage_role_phrase(resume_text: str) -> bool:
+    """首页基本信息是否出现岗位类表述或求职意向类标签。"""
+    head = homepage_basic_info_text(resume_text)
+    if not head:
+        return False
+    return bool(_ROLE_LABEL.search(head) or _ROLE_PHRASE.search(head))
+
+
+def _merge_pass_fail(
+    pass_line: list[dict[str, Any]],
+    code: str,
+    note: str,
+    *,
+    marker: str,
+) -> list[dict[str, Any]]:
+    """规则层强制未过指定 C 项。"""
+    updated: list[dict[str, Any]] = []
+    for item in pass_line:
+        if item.get("id") != code:
+            updated.append(item)
+            continue
+        merged_note = _clean_note(str(item.get("note") or ""))
+        if marker not in merged_note:
+            if merged_note in {"", "未返回说明。", "未返回该项。"} or item.get("pass"):
+                merged_note = note
+            else:
+                merged_note = f"{merged_note.rstrip('。')}。{note}"
+        updated.append(
+            {
+                **item,
+                "pass": False,
+                "note": _clean_note(merged_note),
+                "method": "llm+rule" if item.get("method") == "llm" else "rule",
+            }
+        )
+    return updated
+
+
+def apply_c1_homepage_role_fail(
+    pass_line: list[dict[str, Any]],
+    resume_text: str,
+) -> list[dict[str, Any]]:
+    """规则层：首页无岗位类表述 → C1 未过。"""
+    if has_homepage_role_phrase(resume_text):
+        return pass_line
+    note = (
+        "首页基本信息未见岗位类表述（如大模型应用工程师、算法工程师）；"
+        "仅靠项目或技能反推不够，须在首页写明投什么岗。"
+    )
+    return _merge_pass_fail(pass_line, "C1", note, marker="岗位类表述")
 
 
 def apply_future_date_doubts(
@@ -811,11 +898,14 @@ def judge_resume(
 
     assessor = content_assessor or default_content_assessor
     assessed = assessor(body, job_description)
-    pass_line = apply_credibility_doubts(
-        apply_future_date_doubts(
-            list(assessed.get("pass_line") or []),
+    pass_line = apply_c1_homepage_role_fail(
+        apply_credibility_doubts(
+            apply_future_date_doubts(
+                list(assessed.get("pass_line") or []),
+                body,
+                today=today,
+            ),
             body,
-            today=today,
         ),
         body,
     )

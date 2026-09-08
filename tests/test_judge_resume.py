@@ -16,7 +16,9 @@ from datetime import date
 from employ_guard.judge_resume import (
     JudgeResumeError,
     _clean_note,
+    apply_c1_homepage_role_fail,
     find_future_end_dates,
+    has_homepage_role_phrase,
     _parse_json_object,
     default_content_assessor,
     judge_resume,
@@ -229,7 +231,10 @@ def test_find_future_end_dates() -> None:
 
 def test_apply_future_date_doubts_marks_c7(tmp_path: Path) -> None:
     md = tmp_path / "demo.resume.md"
-    md.write_text("2025.08-2027.06 大模型后端\n", encoding="utf-8")
+    md.write_text(
+        "求职意向：大模型工程师\n2025.08-2027.06 大模型后端\n",
+        encoding="utf-8",
+    )
     result = judge_resume(
         md,
         root=tmp_path,
@@ -247,6 +252,7 @@ def test_apply_credibility_doubts_tu_style(tmp_path: Path) -> None:
     from employ_guard.judge_resume import find_credibility_issues
 
     text = (
+        "求职意向：大模型应用工程师\n"
         "项目一：金融研报生成系统 项目负责人\n"
         "基于 Qwen3.5-4B 的 lora 微调生成研报\n"
         "项目二：智慧健康管家 项目负责人\n"
@@ -275,10 +281,64 @@ def test_apply_credibility_doubts_tu_style(tmp_path: Path) -> None:
     assert by_id["H5"]["level"] == "mid"
 
 
+def test_c1_rule_fails_without_homepage_role() -> None:
+    text = (
+        "姓名：柯文\n电话：19173814213\n邮箱：x@163.com\n\n"
+        "项目经历\nICR智库检索 全栈工程师\n多 Agent 金融问答\n"
+    )
+    assert has_homepage_role_phrase(text) is False
+    pass_line = [
+        {
+            "id": f"C{i}",
+            "pass": True,
+            "doubtful": False,
+            "note": "模型误判过",
+            "method": "llm",
+        }
+        for i in range(1, 10)
+    ]
+    updated = apply_c1_homepage_role_fail(pass_line, text)
+    c1 = next(item for item in updated if item["id"] == "C1")
+    assert c1["pass"] is False
+    assert "岗位类表述" in c1["note"]
+
+
+def test_c1_rule_keeps_pass_with_homepage_role() -> None:
+    text = "NLP 算法工程师\n男 | 现居深圳\n\n## 专业技能\n熟练 Python\n"
+    assert has_homepage_role_phrase(text) is True
+    pass_line = [
+        {
+            "id": "C1",
+            "pass": True,
+            "doubtful": False,
+            "note": "首页有 NLP 算法工程师",
+            "method": "llm",
+        }
+    ]
+    updated = apply_c1_homepage_role_fail(pass_line, text)
+    assert updated[0]["pass"] is True
+
+
+def test_judge_kewei_style_fails_c1(tmp_path: Path) -> None:
+    md = tmp_path / "kewei.resume.md"
+    md.write_text(
+        "姓名：柯文\n电话：19173814213\n\n项目经历\nICR智库检索\n",
+        encoding="utf-8",
+    )
+    result = judge_resume(md, root=tmp_path, content_assessor=_pass_assessor)
+    assert result.content_pass is False
+    c1 = next(item for item in result.pass_line if item["id"] == "C1")
+    assert c1["pass"] is False
+    assert any("C1" in item for item in result.main_blockers)
+
+
 def test_judge_from_resume_md(tmp_path: Path) -> None:
     md = tmp_path / "data" / "output" / "demo" / "demo.resume.md"
     md.parent.mkdir(parents=True)
-    md.write_text("# 简历文本\n\n大模型工程师，RAG 与 Agent 项目经历。\n", encoding="utf-8")
+    md.write_text(
+        "# 简历文本\n\n求职意向：大模型工程师\nRAG 与 Agent 项目经历。\n",
+        encoding="utf-8",
+    )
     result = judge_resume(md, root=tmp_path, content_assessor=_pass_assessor)
     assert result.content_pass is True
     assert result.doubtful_items
@@ -294,16 +354,23 @@ def test_judge_from_resume_md(tmp_path: Path) -> None:
 
 def test_judge_from_pdf_after_read_resume(tmp_path: Path) -> None:
     pdf = tmp_path / "data" / "input" / "resumes" / "ok.pdf"
-    _write_pdf(pdf, "LLM RAG Agent 微调 项目经历")
+    _write_pdf(pdf, "LLM RAG Agent fine-tune")
     extract_resume_text(pdf, root=tmp_path)
+    # 默认字体可能抽不出中文，写入首页岗位类表述供 C1 规则层
+    out_dir = tmp_path / "data" / "output" / "resumes" / "ok"
+    md = next(out_dir.glob("*.resume.md"))
+    md.write_text(
+        "# 简历文本\n\n求职意向：大模型工程师\nLLM RAG Agent fine-tune\n",
+        encoding="utf-8",
+    )
     result = judge_resume(pdf, root=tmp_path, content_assessor=_pass_assessor)
     assert result.content_pass is True
-    assert (tmp_path / "data" / "output" / "resumes" / "ok" / "ok.judge.md").is_file()
+    assert (out_dir / "ok.judge.md").is_file()
 
 
 def test_fail_clears_level_line(tmp_path: Path) -> None:
     md = tmp_path / "demo.resume.md"
-    md.write_text("短文本\n", encoding="utf-8")
+    md.write_text("求职意向：大模型工程师\n短文本\n", encoding="utf-8")
     result = judge_resume(md, root=tmp_path, content_assessor=_fail_assessor)
     assert result.content_pass is False
     data = json.loads(result.report_json.read_text(encoding="utf-8"))
@@ -316,7 +383,7 @@ def test_cli_pass_verdict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 't'\n", encoding="utf-8")
     md = tmp_path / "data" / "output" / "demo" / "demo.resume.md"
     md.parent.mkdir(parents=True)
-    md.write_text("# 简历文本\n\n正文\n", encoding="utf-8")
+    md.write_text("# 简历文本\n\n求职意向：大模型工程师\n正文\n", encoding="utf-8")
 
     def _fake(source: Path, **kwargs):  # type: ignore[no-untyped-def]
         return judge_resume(source, root=tmp_path, content_assessor=_pass_assessor)
