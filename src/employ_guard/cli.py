@@ -136,6 +136,11 @@ def parse_resume_cmd(
 
     typer.echo(f"已写出规范化文本：{result.norm_md}")
     typer.echo(f"规范化方式：{result.normalize_method}")
+    if result.normalize_note:
+        typer.secho(
+            f"LLM 规范化已降级：{result.normalize_note}",
+            fg=typer.colors.YELLOW,
+        )
     typer.echo(f"已写出字段抽取：{result.parsed_md}")
     typer.echo("本步只做规范化与字段抽取，不判能不能投，不评排版。")
     fields = result.fields

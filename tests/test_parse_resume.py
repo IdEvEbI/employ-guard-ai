@@ -13,6 +13,7 @@ from employ_guard.cli import app
 from employ_guard.parse_resume import (
     ParseResumeError,
     infer_age_from_birth,
+    llm_normalize_rejection_reason,
     normalize_parsed_fields,
     normalize_resume_body,
     normalize_resume_body_rules,
@@ -216,12 +217,83 @@ redis 环境下对数据进行增删改查；
 
 def test_normalize_default_path_uses_injected_assessor() -> None:
     raw = "姓名：测\n专业技能\n熟练 Python"
-    out, method = normalize_resume_body(
+    out, method, note = normalize_resume_body(
         raw, assessor=lambda t: "## 基本信息\n\n测\n## 专业技能\n\n- 熟练 Python"
     )
     assert method == "injected"
+    assert note is None
     assert "## 基本信息" in out
     assert "- 熟练 Python" in out
+
+
+def _long_extracted_resume() -> str:
+    skills = "熟悉 LangGraph、RAG、Milvus 与 FastAPI。" * 8
+    project = (
+        "项目经历\n智能客服 Agent 2025.01-至今\n"
+        "项目背景：面向客服场景搭建多 Agent 工作流。\n"
+        "个人职责：负责编排、检索与评测。\n"
+        "项目成果：召回率提升到 90%。\n"
+    ) * 4
+    return (
+        "姓名：测\n求职意向：大模型应用开发工程师\n"
+        "专业技能\n"
+        f"{skills}\n"
+        "工作经历\n2024.01-至今 某公司 工程师\n- 做 RAG 与 Agent。\n"
+        f"{project}"
+    )
+
+
+def test_reject_thinking_dump() -> None:
+    reason = llm_normalize_rejection_reason(
+        _long_extracted_resume(),
+        "我们需要避免前言后语。\n现在检查可能缺失的文本：\n"
+        "现在确定所有内容无遗漏：\n现在逐段输出设计：",
+    )
+    assert reason is not None
+    assert "思考过程" in reason
+
+
+def test_reject_placeholder_and_too_short() -> None:
+    source = _long_extracted_resume()
+    assert llm_normalize_rejection_reason(
+        source, "## 基本信息\n... list\n## 项目经历\n### ...\n"
+    )
+    short = "## 基本信息\n\n测\n求职意向：大模型应用开发工程师\n电话：13800000000"
+    reason = llm_normalize_rejection_reason(source, short)
+    assert reason is not None
+    assert "过短" in reason
+
+
+def test_thinking_dump_falls_back_to_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    source = _long_extracted_resume()
+
+    def _dump(**_kwargs: object) -> str:
+        return (
+            "”。直接用Markdown。\n我们需要避免前言后语。\n"
+            "现在检查可能缺失的文本：\n现在逐段输出设计："
+        )
+
+    monkeypatch.setattr("employ_guard.parse_resume.chat_completion", _dump)
+    out, method, note = normalize_resume_body(source)
+    assert method == "rules_fallback"
+    assert note is not None
+    assert "思考过程" in note or "开头不像" in note
+    assert "智能客服" in out
+    assert "我们需要避免前言后语" not in out
+
+
+def test_too_short_normalize_falls_back_to_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    source = _long_extracted_resume()
+
+    def _short(**_kwargs: object) -> str:
+        return "## 基本信息\n\n测\n求职意向：大模型应用开发工程师"
+
+    monkeypatch.setattr("employ_guard.parse_resume.chat_completion", _short)
+    out, method, note = normalize_resume_body(source)
+    assert method == "rules_fallback"
+    assert note is not None
+    assert "过短" in note
+    assert "智能客服" in out
 
 
 def test_normalize_parsed_fields_marks_empty_incomplete() -> None:
