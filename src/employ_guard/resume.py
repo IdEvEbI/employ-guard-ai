@@ -271,6 +271,18 @@ def _collect_actions(run_dir: Path, stem: str, *, limit: int = 3) -> list[str]:
                     note = item.get("note") or "见内容报告"
                     _add(f"内容 {code}：{note}")
 
+    writing_json = run_dir / f"{stem}.writing.json"
+    if writing_json.is_file():
+        data = _read_json(writing_json)
+        if data.get("writing_pass") is False:
+            findings = data.get("findings") or []
+            if isinstance(findings, list) and findings:
+                first = findings[0] if isinstance(findings[0], dict) else {}
+                note = first.get("note") or first.get("excerpt") or "见文字表达报告"
+                _add(f"文字表达：{note}")
+            else:
+                _add("文字表达：有待改进项，见 writing 报告")
+
     return tips[:limit]
 
 
@@ -283,7 +295,7 @@ def write_brief(result: ResumeRunResult) -> Path:
     elif result.writing_pass is True:
         writing_line = "无明显问题"
     elif result.writing_pass is False:
-        writing_line = "有待改进（不自动等同不能投）"
+        writing_line = "有待改进（计入总出口）"
     else:
         writing_line = "未得到结论"
 
@@ -303,8 +315,8 @@ def write_brief(result: ResumeRunResult) -> Path:
         for tip in result.actions:
             lines.append(f"- {tip}")
     else:
-        if result.layout_pass and result.content_pass:
-            lines.append("- 排版与内容均达标；可按详细报告微调水平线项。")
+        if result.layout_pass and result.content_pass and result.writing_pass is not False:
+            lines.append("- 排版、文字表达与内容均过合格线；可按详细报告微调水平线项。")
         else:
             lines.append("- 见下方详细报告中的未过项。")
 
@@ -1119,8 +1131,9 @@ def run_resume(
         return result
 
     layout_fail = result.layout_pass is False
+    writing_fail = result.writing_pass is False
     content_fail = result.content_pass is False
-    if layout_fail or content_fail:
+    if layout_fail or writing_fail or content_fail:
         result.exit_code = 2
     else:
         result.exit_code = 0

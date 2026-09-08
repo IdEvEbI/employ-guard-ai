@@ -294,7 +294,8 @@ def test_apply_future_date_doubts_marks_c7(tmp_path: Path) -> None:
     c7 = next(item for item in result.pass_line if item["id"] == "C7")
     assert c7["pass"] is True
     assert c7["doubtful"] is True
-    assert "晚于当日" in c7["note"]
+    assert "晚于" in c7["note"]
+    assert "2027.06" in c7["note"]
     assert any("C7" in item for item in result.doubtful_items)
 
 

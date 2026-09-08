@@ -487,7 +487,7 @@ def _print_single_resume_result(result, *, triage: bool, no_questions: bool) -> 
     elif result.writing_pass is True:
         typer.secho("  文字表达：无明显问题", fg=typer.colors.GREEN)
     elif result.writing_pass is False:
-        typer.secho("  文字表达：有待改进（不自动等同不能投）", fg=typer.colors.YELLOW)
+        typer.secho("  文字表达：有待改进", fg=typer.colors.RED)
     else:
         typer.echo("  文字表达：未得到结论")
 
@@ -512,7 +512,8 @@ def _print_single_resume_result(result, *, triage: bool, no_questions: bool) -> 
 
     if result.exit_code == 2:
         typer.secho(
-            "结论：排版或内容未过合格线。请先改对应报告中的未过项后再投。",
+            "结论：未过合格线（排版 / 文字表达 / 内容任一未过）。"
+            "请先改对应报告中的未过项后再投。",
             err=True,
             fg=typer.colors.RED,
             bold=True,
@@ -520,7 +521,7 @@ def _print_single_resume_result(result, *, triage: bool, no_questions: bool) -> 
         raise typer.Exit(code=2)
 
     typer.secho(
-        "结论：排版与内容均达标（文字表达问题不自动否决投递）。",
+        "结论：排版、文字表达与内容均过合格线。",
         fg=typer.colors.GREEN,
         bold=True,
     )

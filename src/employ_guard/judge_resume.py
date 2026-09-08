@@ -1,4 +1,4 @@
-"""判内容能不能投。对照 docs/04-standard/004 §2；不评价排版。"""
+"""判内容能不能投；有前置分项时汇总（R25）。对照 docs/04-standard/004 §2。"""
 
 from __future__ import annotations
 
@@ -12,6 +12,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from employ_guard.judge_aggregate import (
+    layout_writing_summary,
+    load_upstream,
+    overlay_pass_line,
+)
 from employ_guard.llm import LLMError, chat_completion
 from employ_guard.paths import output_run_dir, resolve_input_file
 
@@ -123,15 +128,20 @@ ContentAssessor = Callable[[str, str | None], dict[str, Any]]
 
 @dataclass(frozen=True)
 class JudgeResult:
-    """一次判内容的落盘结果。"""
+    """一次判内容的落盘结果（可含前置分项汇总）。"""
 
     run_dir: Path
     content_pass: bool
+    overall_pass: bool
     scope: str
     pass_line: list[dict[str, Any]]
     level_line: list[dict[str, Any]]
     main_blockers: list[str]
     doubtful_items: list[str]
+    layout_pass: bool | None
+    writing_pass: bool | None
+    time_summary: list[str]
+    upstream_sources: list[str]
     report_md: Path
     report_json: Path
 
@@ -845,30 +855,89 @@ def default_content_assessor(resume_text: str, job_description: str | None) -> d
     raise JudgeResumeError("判内容失败。")
 
 
+def _overall_pass(
+    content_pass: bool,
+    layout_pass: bool | None,
+    writing_pass: bool | None,
+) -> bool:
+    """内容未过，或已有 layout/writing 且未过 → 总出口未过。缺产物不当否决。"""
+    return (
+        content_pass
+        and layout_pass is not False
+        and writing_pass is not False
+    )
+
+
 def _markdown_report(
     *,
     content_pass: bool,
+    overall_pass: bool,
     scope: str,
     pass_line: list[dict[str, Any]],
     level_line: list[dict[str, Any]],
     main_blockers: list[str],
     doubtful_items: list[str],
+    layout_pass: bool | None,
+    writing_pass: bool | None,
+    layout_writing_notes: list[str],
+    time_summary: list[str],
+    upstream_sources: list[str],
 ) -> str:
-    verdict = "内容合格" if content_pass else "内容未合格"
+    content_verdict = "内容合格" if content_pass else "内容未合格"
+    overall_verdict = "总览过合格线" if overall_pass else "总览未过合格线"
     lines = [
-        "# 判能不能投（内容）",
+        "# 判能不能投（汇总）",
         "",
-        "> 本文件由 `judge-resume` 只根据简历文本生成。不评价排版。合格线与水平线分开写。",
+        "> 本文件由 `judge-resume` 生成。合格线与水平线分开写。"
+        "有前置分项时优先汇总；缺口再由 LLM / 规则补洞。排版与文字表达分节写清，不与内容 C 项混为一谈。",
         "",
-        f"**结论**：{verdict}",
+        f"**总览**：{overall_verdict}",
+        "",
+        f"**内容结论**：{content_verdict}",
         "",
         f"**评价范围**：{scope}",
         "",
-        "## 合格线",
-        "",
-        "| 编号 | 是否过 | 存疑 | 说明 |",
-        "| ---- | ------ | ---- | ---- |",
     ]
+    if upstream_sources:
+        lines.extend(
+            [
+                "## 汇总来源",
+                "",
+                "、".join(f"`{name}`" for name in upstream_sources),
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## 排版与文字表达（分项汇总）",
+            "",
+        ]
+    )
+    for note in layout_writing_notes:
+        lines.append(f"- {note}")
+    if layout_pass is False or writing_pass is False:
+        lines.append("- 上列未过项计入老师命令总出口「未过合格线」（报告内仍分开写）。")
+    lines.append("")
+
+    lines.extend(
+        [
+            "## 时间检测汇总",
+            "",
+        ]
+    )
+    for note in time_summary:
+        lines.append(f"- {note}")
+    lines.append("")
+
+    lines.extend(
+        [
+            "## 合格线（内容）",
+            "",
+            "| 编号 | 是否过 | 存疑 | 说明 |",
+            "| ---- | ------ | ---- | ---- |",
+        ]
+    )
     for item in pass_line:
         mark = "过" if item["pass"] else "未过"
         doubt = "是" if item.get("doubtful") else "—"
@@ -876,7 +945,7 @@ def _markdown_report(
         lines.append(f"| {item['id']} | {mark} | {doubt} | {note} |")
 
     if doubtful_items:
-        lines.extend(["", "## 存疑（老师复核，不自动等同未合格）", ""])
+        lines.extend(["", "## 存疑（老师复核，不自动等同内容未合格）", ""])
         for item in pass_line:
             if not item.get("doubtful"):
                 continue
@@ -885,13 +954,13 @@ def _markdown_report(
             lines.append("")
 
     if main_blockers:
-        lines.extend(["", "## 主要卡点", ""])
+        lines.extend(["", "## 主要卡点（内容）", ""])
         for note in main_blockers:
             lines.append(f"- {note}")
 
     lines.extend(["", "## 水平线", ""])
     if not content_pass:
-        lines.append("未过合格线，不输出「水平更高 / 更低」的排序结论。")
+        lines.append("内容未过合格线，不输出「水平更高 / 更低」的排序结论。")
     else:
         lines.extend(
             [
@@ -916,27 +985,37 @@ def judge_resume(
     content_assessor: ContentAssessor | None = None,
     today: date | None = None,
 ) -> JudgeResult:
-    """判内容，写出 `{stem}.judge.md` / `{stem}.judge.json`，返回结果。"""
+    """判内容并汇总前置分项；写出 `{stem}.judge.md` / `{stem}.judge.json`。"""
     run_dir, stem, body, source_label = resolve_resume_text(source, root=root)
     if not body.strip():
         raise JudgeResumeError("简历正文为空，无法判断能不能投。")
 
     text_for_check = prefer_normalized_body(run_dir, stem, body)
     used_normalized = (run_dir / f"{stem}.resume.norm.md").is_file()
+    upstream = load_upstream(run_dir, stem)
 
     assessor = content_assessor or default_content_assessor
     assessed = assessor(text_for_check, job_description)
-    pass_line = apply_c1_homepage_role_fail(
-        apply_credibility_doubts(
-            apply_future_date_doubts(
-                list(assessed.get("pass_line") or []),
-                text_for_check,
-                today=today,
-            ),
+    pass_line = apply_credibility_doubts(
+        apply_future_date_doubts(
+            list(assessed.get("pass_line") or []),
             text_for_check,
+            today=today,
         ),
         text_for_check,
     )
+    # 有 check-profile 时 C1 以分项为准，不再用首页规则层覆盖。
+    if not upstream.has_profile:
+        pass_line = apply_c1_homepage_role_fail(pass_line, text_for_check)
+
+    pass_line, time_summary, _time_rows = overlay_pass_line(
+        pass_line,
+        upstream,
+        text_for_check,
+        today=today,
+    )
+    layout_pass, writing_pass, lw_notes = layout_writing_summary(upstream)
+
     level_line = refine_level_line(
         list(assessed.get("level_line") or []),
         text_for_check,
@@ -946,6 +1025,7 @@ def judge_resume(
     main_blockers = list(assessed.get("main_blockers") or [])
 
     content_pass = all(bool(item.get("pass")) for item in pass_line)
+    overall_pass = _overall_pass(content_pass, layout_pass, writing_pass)
     doubtful_items = [
         f"{item['id']}：{item.get('note', '')}"
         for item in pass_line
@@ -953,12 +1033,11 @@ def judge_resume(
     ]
     if not content_pass:
         level_line = []
-        if not main_blockers:
-            main_blockers = [
-                f"{item['id']}：{item.get('note', '')}"
-                for item in pass_line
-                if not item.get("pass")
-            ]
+        main_blockers = [
+            f"{item['id']}：{item.get('note', '')}"
+            for item in pass_line
+            if not item.get("pass")
+        ]
 
     md_name = f"{stem}.judge.md"
     json_name = f"{stem}.judge.json"
@@ -968,7 +1047,11 @@ def judge_resume(
         "tool": "judge-resume",
         "judges_content": True,
         "evaluates_layout": False,
+        "aggregates_upstream": bool(upstream.sources),
         "content_pass": content_pass,
+        "overall_pass": overall_pass,
+        "layout_pass": layout_pass,
+        "writing_pass": writing_pass,
         "scope": scope,
         "standard": "docs/04-standard/004_resume-bar_简历合格线.md#2",
         "input": source_label,
@@ -979,7 +1062,12 @@ def judge_resume(
         "level_line": level_line,
         "main_blockers": main_blockers,
         "doubtful_items": doubtful_items,
-        "method": {"content": "llm" if content_assessor is None else "injected"},
+        "time_summary": time_summary,
+        "upstream_sources": list(upstream.sources),
+        "method": {
+            "content": "llm" if content_assessor is None else "injected",
+            "aggregate": "upstream-overlay" if upstream.sources else "standalone",
+        },
     }
     if job_description:
         record["job_description_provided"] = True
@@ -987,11 +1075,17 @@ def judge_resume(
     report_md.write_text(
         _markdown_report(
             content_pass=content_pass,
+            overall_pass=overall_pass,
             scope=scope,
             pass_line=pass_line,
             level_line=level_line,
             main_blockers=main_blockers,
             doubtful_items=doubtful_items,
+            layout_pass=layout_pass,
+            writing_pass=writing_pass,
+            layout_writing_notes=lw_notes,
+            time_summary=time_summary,
+            upstream_sources=list(upstream.sources),
         ),
         encoding="utf-8",
     )
@@ -1002,11 +1096,16 @@ def judge_resume(
     return JudgeResult(
         run_dir=run_dir,
         content_pass=content_pass,
+        overall_pass=overall_pass,
         scope=scope,
         pass_line=pass_line,
         level_line=level_line,
         main_blockers=main_blockers,
         doubtful_items=doubtful_items,
+        layout_pass=layout_pass,
+        writing_pass=writing_pass,
+        time_summary=time_summary,
+        upstream_sources=list(upstream.sources),
         report_md=report_md,
         report_json=report_json,
     )

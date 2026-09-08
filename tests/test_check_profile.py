@@ -88,6 +88,44 @@ def test_check_profile_fail_from_md(tmp_path: Path) -> None:
     assert result.target_role is None
 
 
+def test_rule_gate_blocks_work_title_as_homepage(tmp_path: Path) -> None:
+    """涂海鹏类：工作经历有「算法工程师」，首页基本信息无岗位 → 强制 fail。"""
+    md = tmp_path / "tu.resume.md"
+    md.write_text(
+        "# 简历文本\n\n"
+        "## 基本信息\n\n"
+        "- 姓名：涂海鹏\n"
+        "- 电话：13500000000\n"
+        "- 工作年限：两年\n\n"
+        "## 工作经历\n\n"
+        "### 某公司 · 算法工程师 · 2024.09-2026.07\n\n"
+        "负责大模型与 RAG。\n",
+        encoding="utf-8",
+    )
+
+    def wrongly_pass(_text: str, _hint: dict | None) -> dict:
+        return {
+            "status": "pass",
+            "target_role": "算法工程师",
+            "homepage_evidence": "工作经历岗位为算法工程师",
+            "conflict_note": None,
+            "fixes": [],
+            "notes": ["误把工作岗位当首页"],
+        }
+
+    result = check_profile(md, root=tmp_path, profile_assessor=wrongly_pass)
+    assert result.status == "fail"
+    assert result.target_role is None
+    data = json.loads(result.report_json.read_text(encoding="utf-8"))
+    assert data["status"] == "fail"
+    assert "首页" in data["homepage_evidence"]
+    assert "工作经历" in data["homepage_evidence"] or any(
+        "工作经历" in n or "算法工程师" in n for n in data["notes"]
+    )
+    assert data["method"]["profile"] == "injected+rule"
+    assert "首页" in result.report_md.read_text(encoding="utf-8")
+
+
 def test_check_profile_uses_norm_and_parsed_hint(tmp_path: Path) -> None:
     md = tmp_path / "hint.resume.md"
     md.write_text("姓名：测\n", encoding="utf-8")

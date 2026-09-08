@@ -73,13 +73,13 @@ uv run employ-guard resume <含PDF的目录>   # 批跑并写本地总表
 
 `pdf-to-images` 把投递用 PDF 按页写成 `data/output/.../pages/`（本步不评价排版）。`check-layout` 只凭页图对照 [004 §3](./docs/04-standard/004_resume-bar_简历合格线.md) 查排版（须先出图；[002](./docs/02-architecture/002_check-layout_查排版技术说明.md)）。`read-resume` 抽出文本（文字层为空时 OCR；本步不判断能不能投）。`check-writing` 只凭文本对照 [003 §3.5](./docs/04-standard/003_resume-standard_简历书写标准.md) 查错别字、标点与用语（须先 read-resume；[004 技术说明](./docs/02-architecture/004_check-writing_查文字表达技术说明.md)）。
 
-`judge-resume` 只凭文本对照 [004 §2](./docs/04-standard/004_resume-bar_简历合格线.md) 判能不能投（须先 read-resume；[003 技术说明](./docs/02-architecture/003_judge-resume_判能不能投技术说明.md)）。
+`judge-resume` 对照 [004 §2](./docs/04-standard/004_resume-bar_简历合格线.md) 判能不能投；有前置分项时汇总进报告（须先 read-resume；[003 技术说明](./docs/02-architecture/003_judge-resume_判能不能投技术说明.md)）。
 
 `draft-questions` 按主项目出基础题（考察点 + 可能追问）与深挖题（[005 技术说明](./docs/02-architecture/005_draft-questions_出练习题技术说明.md)）；`resume` 完整模式会跑本步，`--triage` / `--no-questions` 可关。
 
 `review-projects` 按主项目给含金量 / 难度档（时间倒序、G1-T、结构缺口、P1～P8 叙事存疑；[007](./docs/02-architecture/007_review-projects_项目审阅技术说明.md) / [005 口径](./docs/04-standard/005_project-review_项目审阅口径.md)）；**不含薪资**；完整 `resume` 会跑，`--triage` 可关。
 
-`resume` 按产品说明 §5 调用上述工具（布局路径与文本路径并行；完整模式含 `review-projects`）；参数可为单份 PDF 或含 PDF 的目录（批跑写 `batch-summary.md`）；已有结果且 PDF 哈希一致则跳过；`--force` 强制重跑；`--triage` 排查模式（关掉文字表达、项目审阅与出题，写出 brief）；可用 `--no-questions` 关掉出练习题（[006 技术说明](./docs/02-architecture/006_resume_投前看简历技术说明.md)）。
+`resume` 按产品说明 §5 调用上述工具（布局路径与文本路径并行；完整模式含 `review-projects`）；参数可为单份 PDF 或含 PDF 的目录（批跑写 `batch-summary.md`）；已有结果且 PDF 哈希一致则跳过；`--force` 强制重跑；`--triage` 排查模式（关掉文字表达、项目审阅与出题，写出 brief）；可用 `--no-questions` 关掉出练习题。**总出口**：排版 / 文字表达 / 内容任一未过 → 退出码 `2`（[006 技术说明](./docs/02-architecture/006_resume_投前看简历技术说明.md)）。
 
 真实简历放在 `data/input/`，不要提交。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
 
