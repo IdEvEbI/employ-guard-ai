@@ -12,6 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from employ_guard.paths import repo_root
+from employ_guard.word_to_pdf import describe_converter, find_soffice, msword_available
 
 
 @dataclass
@@ -135,6 +136,24 @@ def run_env_check(*, root: Path | None = None) -> EnvCheckResult:
                 else "未找到（仅扫描件 / 纯图 PDF 需要；"
                 "macOS：brew install tesseract tesseract-lang。"
                 "数字 PDF 不需要）"
+            ),
+            required=False,
+        )
+    )
+
+    word_ok = find_soffice() is not None or msword_available()
+    result.items.append(
+        CheckItem(
+            name="word-to-pdf 转换器",
+            ok=True,
+            detail=(
+                f"{describe_converter()}（手头只有 Word 原稿时可用）"
+                if word_ok
+                else (
+                    "未找到（仅 word-to-pdf 需要；"
+                    "推荐 brew install --cask libreoffice，"
+                    "或 macOS 安装 Microsoft Word。已有 PDF 时不需要）"
+                )
             ),
             required=False,
         )

@@ -24,6 +24,7 @@ from employ_guard.check_skills import CheckSkillsError, check_skills
 from employ_guard.resume import ResumeError, rewrite_brief_from_artifacts, run_resume
 from employ_guard.resume_batch import run_resume_batch
 from employ_guard.review_projects import ReviewProjectsError, review_projects
+from employ_guard.word_to_pdf import WordToPdfError, convert_word_to_pdf
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -64,6 +65,26 @@ def check() -> None:
             bold=True,
         )
         raise typer.Exit(code=result.exit_code)
+
+
+@app.command("word-to-pdf")
+def word_to_pdf(
+    docx: Path = typer.Argument(..., help="Word 原稿（.docx / .doc）。"),
+    out_dir: Path | None = typer.Option(
+        None,
+        "--out-dir",
+        help="PDF 输出目录；默认与 Word 同目录。",
+    ),
+) -> None:
+    """把 Word 转成投递用 PDF。本步不评价排版或内容；检查仍只认 PDF。"""
+    try:
+        pdf_path = convert_word_to_pdf(docx, out_dir=out_dir)
+    except WordToPdfError as exc:
+        typer.secho(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"已写出 PDF：{pdf_path}")
+    typer.echo("本步只做转换，不评价排版或内容。接着可用：employ-guard resume <这份.pdf>")
 
 
 @app.command("pdf-to-images")

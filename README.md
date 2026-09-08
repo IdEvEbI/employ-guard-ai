@@ -15,9 +15,9 @@
 2. **听后做复盘**：转写现场录音 → 还原问答 → 面试评价（命令 `interview`）。
 3. **后续愿景**：知识库、模拟面试、真面试入库、企业查询（都是新工具，不作为本期必须交付）。
 
-当前里程碑是 **投前看简历 · 结构化链式检查**：R17～R23 已合入；听后做复盘暂缓；**R13 本轮跳过**。当前推进 **R24**（parse 后文本步一律基于 `resume.norm.md` / [#72](https://github.com/IdEvEbI/employ-guard-ai/issues/72)）。其后：**R25** judge 汇总前置（含时间检测）→ **R26** brief 提炼存疑与不达标。顺序见 [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) §5.2。
+当前里程碑是 **投前看简历 · 排查增强补开 R13**：独立工具 `word-to-pdf`（[#80](https://github.com/IdEvEbI/employ-guard-ai/issues/80)）。结构化链 R17～R26 已合入；听后做复盘暂缓；R16 不插队。进度见 [开发看板](./docs/03-delivery/001_dev-board_开发看板.md)。
 
-`parse-resume` / `check-profile` / `check-skills` / `review-projects` 均可单独跑；完整 `resume` 默认挂入（排查关掉贵步骤，仍跑 parse 与 profile）。parse 之后文本评价步优先 `resume.norm.md`。命令列表以 `uv run employ-guard --help` 与产品说明第 4 节为准。
+`word-to-pdf` / `parse-resume` / `check-profile` / `check-skills` / `review-projects` 均可单独跑；完整 `resume` 仍只接受 PDF（缺 PDF 时先转）。parse 之后文本评价步优先 `resume.norm.md`。命令列表以 `uv run employ-guard --help` 与产品说明第 4 节为准。
 
 当前**不做**：全员自助门户、代写简历、用分数替代老师分批、替代按日就业台账、默认使用云端语音识别、把课评「好课标准」用到简历与面试上、为两个动作各建一个仓库。
 
