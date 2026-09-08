@@ -1,6 +1,6 @@
 # 投前看简历（resume）技术说明
 
-- **版本**：v0.10
+- **版本**：v0.11
 - **日期**：2026-09-08
 - **对应命令**：`employ-guard resume`
 - **产品**：[产品说明 §5](../01-product/001_prd_就业守护助手产品说明.md)
@@ -10,12 +10,12 @@
 | 项     | 口径                                                                                                        |
 | ------ | ----------------------------------------------------------------------------------------------------------- |
 | 输入   | **必须是 PDF**；参数可为单份 PDF，或**老师显式指定**的含 PDF 目录（批跑）                                   |
-| 做什么 | 老师一条命令跑完；现行墙钟上 `(出图→查排版) ∥ (抽文本→文字→判断→题)`；**目标**见 §3 结构化链                |
+| 做什么 | 老师一条命令跑完；现行墙钟上 `(出图→查排版) ∥ (抽文本→文字→项目审阅→判断→题)`；**目标**见 §3 结构化链       |
 | 批跑   | 目录下一层 `.pdf`（默认非递归）；逐份调用同一套 `run_resume`；写出本地 `batch-summary.md` / `.json`         |
 | 抽文本 | 优先 PDF 文字层；**整份文字层为空**时 `read-resume` 内 OCR（tesseract）；失败退出码 `1`，不得写成「不能投」 |
 | 跳过   | 对应结果已存在 **且** 输入 PDF 的 sha256 与记录一致时才跳过                                                 |
 | 强制   | `--force` 忽略已有产物，各步重跑                                                                            |
-| 排查   | `--triage`：关掉贵步骤（至少出练习题）；写出短 `{stem}.brief.md`                                            |
+| 排查   | `--triage`：关掉查文字、项目审阅、出练习题；写出短 `{stem}.brief.md`                                        |
 | 进度   | 每步开始打印「正在…」；结束打印状态与耗时（毫秒）                                                           |
 | 可关   | `--no-questions` 关掉按项目出练习题；`--job-desc` 可选                                                      |
 | 不做   | 不合并内容与排版结论；不自动扫描未指定目录；不上门户、不在班级群点名；不把出图/读文本失败写成「不能投」     |
@@ -32,11 +32,11 @@
 | 2    | `check-layout`    | 布局 | 已有 `{stem}.layout.json`，且出图记录 PDF 哈希一致                | `{stem}.layout.md` / `.json`              |
 | 3    | `read-resume`     | 文本 | 已有 `{stem}.resume.md`，且 `{stem}.resume.json` 的 `sha256` 一致 | `{stem}.resume.md` / `.json`（可含 OCR）  |
 | 4    | `check-writing`   | 文本 | 已有 writing 报告且哈希一致；**排查模式下关闭**                   | `{stem}.writing.md` / `.json`             |
-| 5    | `judge-resume`    | 文本 | 已有 judge 报告，且 `resume.json` 的 PDF 哈希一致                 | `{stem}.judge.md` / `.json`               |
-| 6    | `draft-questions` | 文本 | 已有 questions 报告且哈希一致，或已关闭 / **排查模式**            | `{stem}.questions.md` / `.json`（可关闭） |
+| 5    | `review-projects` | 文本 | 已有 projects 报告且哈希一致；**排查模式下关闭**                  | `{stem}.projects.md` / `.json`            |
+| 6    | `judge-resume`    | 文本 | 已有 judge 报告，且 `resume.json` 的 PDF 哈希一致                 | `{stem}.judge.md` / `.json`               |
+| 7    | `draft-questions` | 文本 | 已有 questions 报告且哈希一致，或已关闭 / **排查模式**            | `{stem}.questions.md` / `.json`（可关闭） |
 
-`review-projects` 现行可单独跑，**尚未**挂入上表；挂入见看板 R22 / R23。  
-`parse-resume` 现行可单独跑（`{stem}.resume.norm.md` + `{stem}.parsed.*`），**尚未**挂入上表；挂入见看板 R23。
+`parse-resume` 现行可单独跑（`{stem}.resume.norm.md` + `{stem}.parsed.*`），**尚未**挂入上表；挂入见看板 R23。  
 `check-profile` / `check-skills` 现行可单独跑（`{stem}.profile.*` / `{stem}.skills.*`），**尚未**挂入上表；挂入见看板 R23。
 
 ## 2.1 目录批跑
@@ -78,3 +78,4 @@ uv run employ-guard resume <含PDF的目录> [--triage] [--force]
 | v0.8  | 2026-09-04 | 出题步按项目；不编排 review-projects                             |
 | v0.9  | 2026-09-07 | 写入结构化链目标 §3；并行收窄为 layout ∥ writing；C1 / G1-T 指向 |
 | v0.10 | 2026-09-08 | 注明 check-skills 可单独跑；挂入见 R23                           |
+| v0.11 | 2026-09-08 | 完整模式挂入 review-projects；排查可关；步骤改为 7 步            |

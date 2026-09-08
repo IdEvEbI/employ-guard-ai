@@ -22,6 +22,7 @@ from employ_guard.resume import (
     ResumeRunResult,
     run_resume,
 )
+from employ_guard.review_projects import ProjectsAssessor
 
 
 @dataclass
@@ -164,6 +165,7 @@ def run_resume_batch(
     file_progress: Callable[[int, int, Path], None] | None = None,
     visual_assessor: VisualAssessor | None = None,
     writing_assessor: WritingAssessor | None = None,
+    projects_assessor: ProjectsAssessor | None = None,
     content_assessor: ContentAssessor | None = None,
     questions_assessor: QuestionsAssessor | None = None,
 ) -> BatchRunResult:
@@ -202,6 +204,7 @@ def run_resume_batch(
                 progress=progress,
                 visual_assessor=visual_assessor,
                 writing_assessor=writing_assessor,
+                projects_assessor=projects_assessor,
                 content_assessor=content_assessor,
                 questions_assessor=questions_assessor,
             )
