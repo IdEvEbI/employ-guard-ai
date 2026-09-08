@@ -13,5 +13,6 @@
 | [007 项目审阅技术说明](./007_review-projects_项目审阅技术说明.md)       | `review-projects`：含金量 / 难度档；005 v0.2     |
 | [008 字段抽取技术说明](./008_parse-resume_字段抽取技术说明.md)          | `parse-resume`：规范化 + `parsed`；产品 §4.7a    |
 | [009 基础信息检测技术说明](./009_check-profile_基础信息检测技术说明.md) | `check-profile`：首页岗位类表述 / C1；产品 §4.7a |
+| [010 技能结构检测技术说明](./010_check-skills_技能结构检测技术说明.md)  | `check-skills`：SK1～SK3 / C8；产品 §4.3c        |
 
 简历合格线、JD 扫描、书写标准与项目审阅口径见 [04-standard](../04-standard/README.md)。结构化链式检查目标见 [006 §3](./006_resume_投前看简历技术说明.md) 与看板 §5.2。
