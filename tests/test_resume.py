@@ -139,10 +139,71 @@ def _pass_projects(_text: str, _job: str | None) -> dict:
     }
 
 
+def _pass_normalize(text: str) -> str:
+    return text
+
+
+def _pass_parse(_text: str) -> dict:
+    return {
+        "name": "测",
+        "gender": None,
+        "hometown": None,
+        "age": None,
+        "target_role": "大模型工程师",
+        "phone": None,
+        "email": None,
+        "skills": ["RAG", "Agent"],
+        "work_experience": [],
+        "projects": [
+            {
+                "start": "2024.01",
+                "end": "2025.01",
+                "name": "主项目",
+                "role": "开发",
+                "content": "RAG",
+            }
+        ],
+        "education": [],
+        "self_evaluation": None,
+        "parse_incomplete": False,
+        "parse_notes": [],
+    }
+
+
+def _pass_profile(_text: str, _hint: dict | None) -> dict:
+    return {
+        "status": "pass",
+        "target_role": "大模型工程师",
+        "homepage_evidence": "求职意向：大模型工程师",
+        "conflict_note": None,
+        "fixes": [],
+        "notes": [],
+    }
+
+
+def _pass_skills(_text: str, _hint: dict | None) -> dict:
+    return {
+        "status": "pass",
+        "target_role": "大模型工程师",
+        "grouping": {"status": "pass", "note": "已分组"},
+        "role_alignment": {"status": "pass", "note": "同向"},
+        "project_coverage": {"status": "pass", "note": "有支撑"},
+        "market_alignment": {"status": "pass", "note": "可见高频"},
+        "skill_order": {"status": "pass", "note": "相关靠前"},
+        "verbosity_note": None,
+        "fixes": [],
+        "notes": [],
+    }
+
+
 def _inject(**kwargs):  # type: ignore[no-untyped-def]
     return {
         "visual_assessor": _pass_visual,
+        "normalize_assessor": _pass_normalize,
+        "parse_assessor": _pass_parse,
+        "profile_assessor": _pass_profile,
         "writing_assessor": _pass_writing,
+        "skills_assessor": _pass_skills,
         "projects_assessor": _pass_projects,
         "content_assessor": _pass_content,
         "questions_assessor": _questions,
@@ -181,7 +242,10 @@ def test_full_pass_exit_0(tmp_path: Path) -> None:
     assert (result.run_dir / "pages").is_dir()
     assert (result.run_dir / "demo.layout.json").is_file()
     assert (result.run_dir / "demo.resume.md").is_file()
+    assert (result.run_dir / "demo.parsed.json").is_file()
+    assert (result.run_dir / "demo.profile.json").is_file()
     assert (result.run_dir / "demo.writing.json").is_file()
+    assert (result.run_dir / "demo.skills.json").is_file()
     assert (result.run_dir / "demo.projects.json").is_file()
     assert (result.run_dir / "demo.judge.json").is_file()
     assert (result.run_dir / "demo.questions.json").is_file()
@@ -304,10 +368,16 @@ def test_triage_skips_writing_and_questions_writes_brief(tmp_path: Path) -> None
     assert result.exit_code == 0
     assert result.triage is True
     by_name = {s.name: s for s in result.steps}
+    assert by_name["parse-resume"].status == "ran"
+    assert by_name["check-profile"].status == "ran"
     assert by_name["check-writing"].status == "disabled"
+    assert by_name["check-skills"].status == "disabled"
     assert by_name["review-projects"].status == "disabled"
     assert by_name["draft-questions"].status == "disabled"
+    assert (result.run_dir / "triage.parsed.json").is_file()
+    assert (result.run_dir / "triage.profile.json").is_file()
     assert not (result.run_dir / "triage.writing.json").is_file()
+    assert not (result.run_dir / "triage.skills.json").is_file()
     assert not (result.run_dir / "triage.projects.json").is_file()
     assert not (result.run_dir / "triage.questions.json").is_file()
     assert result.writing_pass is None
@@ -362,12 +432,12 @@ def test_progress_emits_start_and_finish(tmp_path: Path) -> None:
     assert any("正在 PDF 出图" in m for m in messages)
     assert any("正在 查排版" in m for m in messages)
     assert any("正在 判能不能投" in m for m in messages)
-    assert any("[1/7]" in m for m in messages)
-    assert any("[3/7]" in m for m in messages)
+    assert any("[1/10]" in m for m in messages)
+    assert any("[3/10]" in m for m in messages)
     assert any("· 已跑 ·" in m and "ms" in m for m in messages)
     assert all(s.elapsed_ms is not None for s in result.steps)
-    # 6 steps × (start + finish)
-    assert len(messages) == 14
+    # 10 steps × (start + finish)
+    assert len(messages) == 20
 
 
 def test_cli_resume_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

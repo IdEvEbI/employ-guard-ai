@@ -119,10 +119,63 @@ def _pass_projects(_text: str, _job: str | None) -> dict:
     }
 
 
+def _pass_normalize(text: str) -> str:
+    return text
+
+
+def _pass_parse(_text: str) -> dict:
+    return {
+        "name": "测",
+        "gender": None,
+        "hometown": None,
+        "age": None,
+        "target_role": "大模型工程师",
+        "phone": None,
+        "email": None,
+        "skills": ["RAG"],
+        "work_experience": [],
+        "projects": [],
+        "education": [],
+        "self_evaluation": None,
+        "parse_incomplete": False,
+        "parse_notes": [],
+    }
+
+
+def _pass_profile(_text: str, _hint: dict | None) -> dict:
+    return {
+        "status": "pass",
+        "target_role": "大模型工程师",
+        "homepage_evidence": "求职意向：大模型工程师",
+        "conflict_note": None,
+        "fixes": [],
+        "notes": [],
+    }
+
+
+def _pass_skills(_text: str, _hint: dict | None) -> dict:
+    return {
+        "status": "pass",
+        "target_role": "大模型工程师",
+        "grouping": {"status": "pass", "note": "ok"},
+        "role_alignment": {"status": "pass", "note": "ok"},
+        "project_coverage": {"status": "pass", "note": "ok"},
+        "market_alignment": {"status": "pass", "note": "ok"},
+        "skill_order": {"status": "pass", "note": "ok"},
+        "verbosity_note": None,
+        "fixes": [],
+        "notes": [],
+    }
+
+
 def _inject(**kwargs):  # type: ignore[no-untyped-def]
     base = {
         "visual_assessor": _pass_visual,
+        "normalize_assessor": _pass_normalize,
+        "parse_assessor": _pass_parse,
+        "profile_assessor": _pass_profile,
         "writing_assessor": _pass_writing,
+        "skills_assessor": _pass_skills,
         "projects_assessor": _pass_projects,
         "content_assessor": _pass_content,
         "questions_assessor": _pass_questions,

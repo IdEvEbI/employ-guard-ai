@@ -18,6 +18,16 @@ from employ_guard.check_layout import (
     VisualAssessor,
     check_layout,
 )
+from employ_guard.check_profile import (
+    CheckProfileError,
+    ProfileAssessor,
+    check_profile,
+)
+from employ_guard.check_skills import (
+    CheckSkillsError,
+    SkillsAssessor,
+    check_skills,
+)
 from employ_guard.check_writing import (
     CheckWritingError,
     WritingAssessor,
@@ -36,6 +46,12 @@ from employ_guard.judge_resume import (
     JudgeResult,
     judge_resume,
 )
+from employ_guard.parse_resume import (
+    NormalizeAssessor,
+    ParseAssessor,
+    ParseResumeError,
+    parse_resume,
+)
 from employ_guard.paths import output_run_dir, resolve_input_file
 from employ_guard.pdf_to_images import (
     RECORD_NAME as PDF_TO_IMAGES_RECORD,
@@ -52,12 +68,15 @@ from employ_guard.review_projects import (
 StepStatus = Literal["ran", "skipped", "failed", "disabled"]
 ProgressHook = Callable[[str], None]
 
-STEP_TOTAL = 7
+STEP_TOTAL = 10
 STEP_ORDER: tuple[str, ...] = (
     "pdf-to-images",
     "check-layout",
     "read-resume",
+    "parse-resume",
+    "check-profile",
     "check-writing",
+    "check-skills",
     "review-projects",
     "judge-resume",
     "draft-questions",
@@ -67,7 +86,10 @@ STEP_LABELS: dict[str, str] = {
     "pdf-to-images": "PDF 出图",
     "check-layout": "查排版",
     "read-resume": "读简历",
+    "parse-resume": "规范化与字段抽取",
+    "check-profile": "基础信息检测",
     "check-writing": "查文字表达",
+    "check-skills": "技能结构检测",
     "review-projects": "项目审阅",
     "judge-resume": "判能不能投",
     "draft-questions": "出练习题",
@@ -488,18 +510,23 @@ def _run_text_path(
     current_sha: str,
     force: bool,
     skip_writing: bool,
+    skip_skills: bool,
     skip_projects: bool,
     skip_questions: bool,
     triage: bool,
     job_description: str | None,
     root: Path | None,
     clock: _StepClock,
+    normalize_assessor: NormalizeAssessor | None,
+    parse_assessor: ParseAssessor | None,
+    profile_assessor: ProfileAssessor | None,
     writing_assessor: WritingAssessor | None,
+    skills_assessor: SkillsAssessor | None,
     projects_assessor: ProjectsAssessor | None,
     content_assessor: ContentAssessor | None,
     questions_assessor: QuestionsAssessor | None,
 ) -> _PathBundle:
-    """抽文本 → 查文字表达 → 项目审阅 → 判能不能投 → 按项目出练习题。"""
+    """抽文本 → 规范化/抽取 → 基础信息 → 文字 → 技能 → 项目审阅 → 判断 → 出题。"""
     bundle = _PathBundle()
 
     def _add(outcome: StepOutcome, started: float) -> None:
@@ -544,6 +571,110 @@ def _run_text_path(
                 status="ran",
                 detail=detail,
                 path=resume_md,
+            ),
+            t0,
+        )
+
+    t0 = clock.start("parse-resume")
+    parsed_json = run_dir / f"{stem}.parsed.json"
+    norm_md = run_dir / f"{stem}.resume.norm.md"
+    can_skip_parse = (
+        not force
+        and not text_reran
+        and parsed_json.is_file()
+        and norm_md.is_file()
+        and _resume_text_match_pdf(run_dir, stem, current_sha)
+    )
+    if can_skip_parse:
+        _add(
+            StepOutcome(
+                name="parse-resume",
+                status="skipped",
+                detail="已有规范化与字段抽取（PDF 哈希一致）",
+                path=parsed_json,
+            ),
+            t0,
+        )
+    else:
+        had_parsed = parsed_json.is_file()
+        try:
+            parsed = parse_resume(
+                pdf_path,
+                root=root,
+                normalize_assessor=normalize_assessor,
+                parse_assessor=parse_assessor,
+            )
+        except ParseResumeError as exc:
+            _add(
+                StepOutcome(name="parse-resume", status="failed", detail=str(exc)),
+                t0,
+            )
+            bundle.hard_error = str(exc)
+            return bundle
+        incomplete = "（抽取不完整，不写成不能投）" if parsed.parse_incomplete else ""
+        base = f"已写出规范化正文与字段{incomplete}"
+        if force and had_parsed:
+            detail = f"强制重跑，{base}"
+        elif had_parsed:
+            detail = f"PDF 已变更，重新抽取（{base}）"
+        else:
+            detail = base
+        _add(
+            StepOutcome(
+                name="parse-resume",
+                status="ran",
+                detail=detail,
+                path=parsed.parsed_json,
+            ),
+            t0,
+        )
+
+    t0 = clock.start("check-profile")
+    profile_json = run_dir / f"{stem}.profile.json"
+    can_skip_profile = (
+        not force
+        and not text_reran
+        and profile_json.is_file()
+        and _resume_text_match_pdf(run_dir, stem, current_sha)
+    )
+    if can_skip_profile:
+        _add(
+            StepOutcome(
+                name="check-profile",
+                status="skipped",
+                detail="已有基础信息检测（PDF 哈希一致）",
+                path=run_dir / f"{stem}.profile.md",
+            ),
+            t0,
+        )
+    else:
+        had_profile = profile_json.is_file()
+        try:
+            profiled = check_profile(
+                pdf_path,
+                root=root,
+                profile_assessor=profile_assessor,
+            )
+        except CheckProfileError as exc:
+            _add(
+                StepOutcome(name="check-profile", status="failed", detail=str(exc)),
+                t0,
+            )
+            bundle.hard_error = str(exc)
+            return bundle
+        base = f"基础信息 {profiled.status}"
+        if force and had_profile:
+            detail = f"强制重跑，{base}"
+        elif had_profile:
+            detail = f"PDF 已变更，重新检测（{base}）"
+        else:
+            detail = base
+        _add(
+            StepOutcome(
+                name="check-profile",
+                status="ran",
+                detail=detail,
+                path=profiled.report_md,
             ),
             t0,
         )
@@ -619,6 +750,66 @@ def _run_text_path(
                     status="ran",
                     detail=detail,
                     path=writing.report_md,
+                ),
+                t0,
+            )
+
+    t0 = clock.start("check-skills")
+    skills_json = run_dir / f"{stem}.skills.json"
+    if skip_skills:
+        _add(
+            StepOutcome(
+                name="check-skills",
+                status="disabled",
+                detail="排查模式未做技能结构检测",
+            ),
+            t0,
+        )
+    else:
+        can_skip_skills = (
+            not force
+            and not text_reran
+            and skills_json.is_file()
+            and _resume_text_match_pdf(run_dir, stem, current_sha)
+        )
+        if can_skip_skills:
+            _add(
+                StepOutcome(
+                    name="check-skills",
+                    status="skipped",
+                    detail="已有技能结构检测（PDF 哈希一致）",
+                    path=run_dir / f"{stem}.skills.md",
+                ),
+                t0,
+            )
+        else:
+            had_skills = skills_json.is_file()
+            try:
+                skilled = check_skills(
+                    pdf_path,
+                    root=root,
+                    skills_assessor=skills_assessor,
+                )
+            except CheckSkillsError as exc:
+                _add(
+                    StepOutcome(name="check-skills", status="failed", detail=str(exc)),
+                    t0,
+                )
+                bundle.hard_error = str(exc)
+                return bundle
+            base = f"技能结构 {skilled.status}"
+            if force and had_skills:
+                detail = f"强制重跑，{base}"
+            elif had_skills:
+                detail = f"PDF 已变更，重新检测（{base}）"
+            else:
+                detail = base
+            _add(
+                StepOutcome(
+                    name="check-skills",
+                    status="ran",
+                    detail=detail,
+                    path=skilled.report_md,
                 ),
                 t0,
             )
@@ -844,7 +1035,11 @@ def run_resume(
     root: Path | None = None,
     progress: ProgressHook | None = None,
     visual_assessor: VisualAssessor | None = None,
+    normalize_assessor: NormalizeAssessor | None = None,
+    parse_assessor: ParseAssessor | None = None,
+    profile_assessor: ProfileAssessor | None = None,
     writing_assessor: WritingAssessor | None = None,
+    skills_assessor: SkillsAssessor | None = None,
     content_assessor: ContentAssessor | None = None,
     projects_assessor: ProjectsAssessor | None = None,
     questions_assessor: QuestionsAssessor | None = None,
@@ -860,6 +1055,7 @@ def run_resume(
 
     skip_questions = skip_questions or triage
     skip_writing = triage
+    skip_skills = triage
     skip_projects = triage
 
     run_dir = output_run_dir(pdf_path, root=root)
@@ -890,13 +1086,18 @@ def run_resume(
             current_sha=current_sha,
             force=force,
             skip_writing=skip_writing,
+            skip_skills=skip_skills,
             skip_projects=skip_projects,
             skip_questions=skip_questions,
             triage=triage,
             job_description=job_description,
             root=root,
             clock=clock,
+            normalize_assessor=normalize_assessor,
+            parse_assessor=parse_assessor,
+            profile_assessor=profile_assessor,
             writing_assessor=writing_assessor,
+            skills_assessor=skills_assessor,
             projects_assessor=projects_assessor,
             content_assessor=content_assessor,
             questions_assessor=questions_assessor,
