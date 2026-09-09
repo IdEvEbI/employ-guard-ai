@@ -1,7 +1,7 @@
 # 查排版技术说明
 
-- **版本**：v0.3
-- **日期**：2026-09-04
+- **版本**：v0.4
+- **日期**：2026-09-09
 - **对应工具**：`employ-guard check-layout`
 - **标准**：[004 简历合格线 §3](../04-standard/004_resume-bar_简历合格线.md)
 - **提示词位置**：`src/employ_guard/check_layout.py` 中 `SYSTEM_PROMPT` / `USER_PROMPT`
@@ -29,7 +29,7 @@
 | **defects**       | 同一次视觉调用 + 几何兜底          | 行首标点、列表符号不一致、对齐异常、段前段后过密 / 长段墙、字体字号不一致（后者不单独抬未过） |
 | **revision_tips** | **规则**                           | 超页、合格线未过或细项成立时给出压页、拆短句、统一字号等；**字体未检出时仍提示人工再看字号**  |
 
-视觉调用：OpenAI 兼容 Chat Completions；页图 base64；`detail=high`；默认模型 `deepseek-v4-flash-vision-exp`（`LLM_VISION_MODEL` 可改）。JSON 中 `geometry` 记录各页行占用率与阈值。
+视觉调用：OpenAI 兼容 Chat Completions；页图 base64；`detail=high`；默认模型 `deepseek-v4-flash-vision-exp`（`LLM_VISION_MODEL` 可改）。默认超时 **180 秒**（与文本 LLM 对齐，`LLM_VISION_TIMEOUT_SEC` 可改）；超时或连接被掐后额外重试 2 次（`LLM_VISION_RETRIES` 可改）。JSON 中 `geometry` 记录各页行占用率与阈值。看图仍失败时按 §3 退出，**不得**用几何规则层编造 P2～P5。
 
 本仓是**固定流程里的一步**，不是自主智能体。
 
