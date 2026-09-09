@@ -296,6 +296,81 @@ def test_too_short_normalize_falls_back_to_rules(monkeypatch: pytest.MonkeyPatch
     assert "智能客服" in out
 
 
+def _resume_with_education() -> str:
+    return (
+        _long_extracted_resume()
+        + "教育经历\n某市应用技术学院|人工智能 本科 | 统招全日制 2021.9 - 2025.6\n"
+        "• 主修课程: 机器学习、深度学习、Python、计算机网络\n"
+    )
+
+
+def _long_markdown_without_education() -> str:
+    skills = "\n".join(
+        ["- 大模型应用：熟悉 RAG、Agent 与结构化输出。" for _ in range(8)]
+    )
+    projects = "\n".join(
+        [
+            "### 智能客服 Agent\n#### 个人职责\n- 负责编排、检索与评测。\n"
+            "#### 项目成果\n- 召回率提升到 90%。"
+            for _ in range(4)
+        ]
+    )
+    return (
+        "## 基本信息\n- 姓名：测\n- 求职意向：大模型应用开发工程师\n\n"
+        f"## 专业技能\n{skills}\n\n## 工作经历\n"
+        "### 某公司 — 工程师（2024.01 — 至今）\n"
+        "#### 工作职责\n- 做 RAG 与 Agent。\n\n"
+        f"## 项目经历\n{projects}\n"
+    )
+
+
+def test_reject_missing_education_section() -> None:
+    reason = llm_normalize_rejection_reason(
+        _resume_with_education(), _long_markdown_without_education()
+    )
+    assert reason is not None
+    assert "教育经历" in reason
+
+
+def test_education_alias_heading_is_accepted() -> None:
+    candidate = (
+        _long_markdown_without_education()
+        + "\n## 教育背景\n- 某市应用技术学院 人工智能 本科 2021.9 - 2025.6\n"
+    )
+    assert llm_normalize_rejection_reason(_resume_with_education(), candidate) is None
+
+
+def test_reject_truncated_last_line() -> None:
+    candidate = (
+        _long_markdown_without_education().rstrip()
+        + "\n- 参与风险类历史案例重排序策略设计，对案件"
+    )
+    reason = llm_normalize_rejection_reason(_long_extracted_resume(), candidate)
+    assert reason is not None
+    assert "截断" in reason
+
+
+def test_truncated_normalize_falls_back_to_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _resume_with_education()
+
+    def _cut(**_kwargs: object) -> str:
+        return (
+            _long_markdown_without_education().rstrip()
+            + "\n- 参与风险类历史案例重排序策略设计，对案件"
+        )
+
+    monkeypatch.setattr("employ_guard.parse_resume.chat_completion", _cut)
+    out, method, note = normalize_resume_body(source)
+    assert method == "rules_fallback"
+    assert note is not None
+    assert "章节" in note or "截断" in note
+    assert "某市应用技术学院" in out
+    assert "## 教育经历" in out
+    assert "对案件" not in out
+
+
 def test_normalize_parsed_fields_marks_empty_incomplete() -> None:
     fields = normalize_parsed_fields({"name": None, "projects": [], "work_experience": []})
     assert fields["parse_incomplete"] is True

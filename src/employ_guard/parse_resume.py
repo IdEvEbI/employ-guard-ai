@@ -109,10 +109,92 @@ _PLACEHOLDER_RE = re.compile(
 _SHORT_RATIO = 0.28
 _SHORT_SOURCE_MIN = 400
 _SHORT_ABS_MIN = 120
+_TAIL_NEEDLE_LEN = 18
+_TAIL_REMAINING_MIN = 80
+_LAST_LINE_MIN = 16
+_SECTION_FAMILIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("education", ("教育经历", "教育背景")),
+    ("projects", ("项目经历", "项目经验")),
+    ("work", ("工作经历", "工作经验")),
+    ("skills", ("专业技能",)),
+    ("self", ("自我评价",)),
+)
+_TERMINAL_PUNCT = re.compile(r"[。！？；…!?）)】」』\"'”’]$")
+_LAST_LINE_EXEMPT = re.compile(
+    r"(学院|大学|学校|本科|专科|硕士|博士|高职|主修课程|技术栈|学历)"
+)
 
 
 def _plain_len(text: str) -> int:
     return len(re.sub(r"\s+", "", text))
+
+
+def _section_families_present(text: str) -> set[str]:
+    """抽出或规范化正文里出现过的一级章节族（按行首标题，含 Markdown）。"""
+    found: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        line = re.sub(r"^#{1,6}\s*", "", line)
+        line = re.sub(r"^[■●•·▪◦]\s*", "", line)
+        for family, aliases in _SECTION_FAMILIES:
+            if family in found:
+                continue
+            for alias in aliases:
+                if (
+                    line == alias
+                    or line.startswith(f"{alias} ")
+                    or line.startswith(f"{alias}|")
+                    or line.startswith(f"{alias}：")
+                    or line.startswith(f"{alias}:")
+                ):
+                    found.add(family)
+                    break
+    return found
+
+
+def _missing_source_sections(source: str, candidate: str) -> tuple[str, ...]:
+    """抽出正文有、规范化结果没有的章节族；返回用于说明的标题。"""
+    src = _section_families_present(source)
+    cand = _section_families_present(candidate)
+    missing: list[str] = []
+    for family, aliases in _SECTION_FAMILIES:
+        if family in src and family not in cand:
+            missing.append(aliases[0])
+    return tuple(missing)
+
+
+def _looks_cut_off_against_source(source: str, candidate: str) -> bool:
+    """规范化末尾仍能在抽出正文中定位，且后面还剩一大段 → 文末被截断。"""
+    src = re.sub(r"\s+", "", source)
+    cand = re.sub(r"\s+", "", candidate)
+    if len(cand) < _TAIL_NEEDLE_LEN:
+        return False
+    needle = cand[-_TAIL_NEEDLE_LEN:]
+    idx = src.find(needle)
+    if idx < 0:
+        return False
+    remaining = len(src) - idx - len(needle)
+    return remaining >= _TAIL_REMAINING_MIN
+
+
+def _last_line_looks_truncated(candidate: str) -> bool:
+    """末行像半截职责句（无句末标点、非院校/课程/标题）。"""
+    line = ""
+    for raw in reversed(candidate.splitlines()):
+        if raw.strip():
+            line = raw.strip()
+            break
+    if not line or line.startswith("#"):
+        return False
+    if _TERMINAL_PUNCT.search(line) or _LAST_LINE_EXEMPT.search(line):
+        return False
+    body = re.sub(r"^[-*•·]\s*", "", line)
+    if _plain_len(body) < _LAST_LINE_MIN:
+        return False
+    last = body[-1]
+    return "\u4e00" <= last <= "\u9fff"
 
 
 def llm_normalize_rejection_reason(source: str, candidate: str) -> str | None:
@@ -133,6 +215,11 @@ def llm_normalize_rejection_reason(source: str, candidate: str) -> str | None:
     cand_n = _plain_len(cand)
     if src_n >= _SHORT_SOURCE_MIN and cand_n < max(_SHORT_ABS_MIN, int(src_n * _SHORT_RATIO)):
         return "规范化结果相对抽出正文过短"
+    missing = _missing_source_sections(source, cand)
+    if missing:
+        return "规范化结果缺少抽出正文中的章节：" + "、".join(missing)
+    if _looks_cut_off_against_source(source, cand) or _last_line_looks_truncated(cand):
+        return "规范化结果文末像被截断"
     return None
 
 
