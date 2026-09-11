@@ -137,6 +137,8 @@ class ProjectsResult:
     g1t_doubtful: bool = False
     g1t_note: str = ""
     credibility_flags: list[CredibilityFlag] = field(default_factory=list)
+    llm_degraded: bool = False
+    llm_error: str | None = None
 
     @property
     def project_count(self) -> int:
@@ -149,6 +151,13 @@ class ReviewProjectsError(Exception):
 
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _shorten_error(message: str, *, max_len: int = 240) -> str:
+    text = re.sub(r"\s+", " ", str(message or "").strip())
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:
@@ -757,9 +766,26 @@ def default_projects_assessor(
             if attempt < len(ATTEMPT_STRATEGIES):
                 time.sleep(float(attempt))
                 continue
-            raise last_error from exc
+            return {
+                "scope": DEFAULT_SCOPE,
+                "summary": (
+                    "项目审阅大模型输出无法解析，本步未给出含金量 / 难度档，"
+                    "也不编造 P1～P8。"
+                ),
+                "projects": [],
+                "profile_hint": {},
+                "llm_degraded": True,
+                "llm_error": _shorten_error(str(last_error)),
+            }
 
-    raise ReviewProjectsError("项目审阅失败。")
+    return {
+        "scope": DEFAULT_SCOPE,
+        "summary": "项目审阅大模型输出无法解析，本步未给出含金量 / 难度档。",
+        "projects": [],
+        "profile_hint": {},
+        "llm_degraded": True,
+        "llm_error": "项目审阅失败。",
+    }
 
 
 def _tier_zh(tier: str) -> str:
@@ -786,6 +812,8 @@ def _markdown_report(
     g1t_doubtful: bool,
     g1t_note: str,
     credibility_flags: list[CredibilityFlag],
+    llm_degraded: bool = False,
+    llm_error: str | None = None,
 ) -> str:
     lines = [
         "# 项目审阅（含金量 / 难度档）",
@@ -798,18 +826,33 @@ def _markdown_report(
         "",
         f"**摘要**：{summary}",
         "",
-        f"**G1-T（近段宜更高）**：{'存疑' if g1t_doubtful else '符合期望'} — {g1t_note}",
-        "",
     ]
-    if credibility_flags:
-        lines.append("**存疑清单（辅导，非合格线）**：")
-        lines.append("")
-        for flag in credibility_flags:
-            lines.append(f"- **{flag.code}**（存疑 / 辅导）：{flag.note}")
-        lines.append("")
+    if llm_degraded:
+        reason = (llm_error or "大模型输出无法解析").strip()
+        lines.extend(
+            [
+                f"**本步状态**：LLM 降级，未给出档次、未编造 P1～P8。原因：{reason}",
+                "",
+                "**G1-T（近段宜更高）**：未计算（LLM 降级）",
+                "",
+                "**存疑清单**：因降级未做 P1～P8。",
+                "",
+            ]
+        )
     else:
-        lines.append("**存疑清单**：未触发 P1～P8。")
+        lines.append(
+            f"**G1-T（近段宜更高）**：{'存疑' if g1t_doubtful else '符合期望'} — {g1t_note}"
+        )
         lines.append("")
+        if credibility_flags:
+            lines.append("**存疑清单（辅导，非合格线）**：")
+            lines.append("")
+            for flag in credibility_flags:
+                lines.append(f"- **{flag.code}**（存疑 / 辅导）：{flag.note}")
+            lines.append("")
+        else:
+            lines.append("**存疑清单**：未触发 P1～P8。")
+            lines.append("")
     lines.extend(
         [
             f"**声明**：{DISCLAIMER}",
@@ -869,28 +912,37 @@ def review_projects(
     text_for_check = prefer_normalized_body(run_dir, stem, body)
     assessor = projects_assessor or default_projects_assessor
     assessed = assessor(text_for_check, job_description)
+    llm_degraded = bool(assessed.get("llm_degraded"))
+    llm_error = str(assessed.get("llm_error") or "").strip() or None
     projects = list(assessed.get("projects") or [])
-    if not projects:
+    if not projects and not llm_degraded:
         raise ReviewProjectsError("未得到任何项目审阅结果。")
     scope = str(assessed.get("scope") or DEFAULT_SCOPE)
     summary = str(assessed.get("summary") or "见各项目档次与依据。")
     profile_hint = _normalize_profile_hint(assessed.get("profile_hint"))
 
     # injected assessor 可能尚未规范化
-    if projects_assessor is not None:
+    if projects_assessor is not None and not llm_degraded:
         projects = _normalize_projects({"projects": projects})
         for item in projects:
             item["method"] = "injected"
 
-    g1t_doubtful, g1t_note = evaluate_g1t(projects)
-    credibility_flags = evaluate_credibility(
-        projects, profile_hint, job_description=job_description
-    )
-    if g1t_doubtful:
-        credibility_flags = [
-            CredibilityFlag(code="G1-T", note=g1t_note),
-            *credibility_flags,
-        ]
+    if llm_degraded:
+        g1t_doubtful, g1t_note = (
+            False,
+            "项目审阅 LLM 降级，未计算 G1-T 与 P1～P8。",
+        )
+        credibility_flags: list[CredibilityFlag] = []
+    else:
+        g1t_doubtful, g1t_note = evaluate_g1t(projects)
+        credibility_flags = evaluate_credibility(
+            projects, profile_hint, job_description=job_description
+        )
+        if g1t_doubtful:
+            credibility_flags = [
+                CredibilityFlag(code="G1-T", note=g1t_note),
+                *credibility_flags,
+            ]
 
     public_projects = _strip_private(projects)
     report_md = run_dir / f"{stem}.projects.md"
@@ -937,10 +989,16 @@ def review_projects(
         "used_normalized": (run_dir / f"{stem}.resume.norm.md").is_file(),
         "projects": public_projects,
         "targets": {"max_projects": MAX_PROJECTS, "max_fixes_per_project": MAX_FIXES},
+        "llm_degraded": llm_degraded,
+        "llm_error": llm_error,
         "method": {
-            "projects": "llm" if projects_assessor is None else "injected",
-            "g1t": "rule",
-            "credibility": "rule+llm_fields",
+            "projects": (
+                "llm-degraded"
+                if llm_degraded
+                else ("llm" if projects_assessor is None else "injected")
+            ),
+            "g1t": "skipped" if llm_degraded else "rule",
+            "credibility": "skipped" if llm_degraded else "rule+llm_fields",
         },
     }
     if job_description:
@@ -954,6 +1012,8 @@ def review_projects(
             g1t_doubtful=g1t_doubtful,
             g1t_note=g1t_note,
             credibility_flags=credibility_flags,
+            llm_degraded=llm_degraded,
+            llm_error=llm_error,
         ),
         encoding="utf-8",
     )
@@ -971,4 +1031,6 @@ def review_projects(
         g1t_doubtful=g1t_doubtful,
         g1t_note=g1t_note,
         credibility_flags=credibility_flags,
+        llm_degraded=llm_degraded,
+        llm_error=llm_error,
     )

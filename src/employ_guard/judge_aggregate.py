@@ -207,33 +207,39 @@ def apply_skills_projects_c3_c8(
         c3_pass = True
         c3_doubt = False
         if projects is not None:
-            plist = projects.get("projects") or []
-            if isinstance(plist, list) and plist:
-                tiers = []
-                gaps_n = 0
-                typed = [p for p in plist if isinstance(p, dict)]
-                for item in typed:
-                    name = str(item.get("name") or "项目")
-                    vt = str(item.get("value_tier") or "mid")
-                    dt = str(item.get("difficulty_tier") or "mid")
-                    tiers.append(f"{name}含金量{vt}/难度{dt}")
-                    gaps = item.get("structure_gaps") or []
-                    if isinstance(gaps, list):
-                        gaps_n += len(gaps)
-                parts.append("；".join(tiers))
-                if gaps_n:
-                    c3_doubt = True
-                    parts.append(f"结构缺口合计 {gaps_n} 处（辅导）")
-                if typed and all(
-                    str(item.get("value_tier")) == "low"
-                    and str(item.get("difficulty_tier")) == "low"
-                    for item in typed
-                ):
-                    c3_pass = False
-                    parts.append("主项目含金量与难度均为低，技术证据偏薄")
-            else:
+            if projects.get("llm_degraded"):
                 c3_doubt = True
-                parts.append("项目审阅未识别到主项目列表")
+                parts.append(
+                    "项目审阅 LLM 降级，未给出含金量 / 难度档（不因此写成不能投）"
+                )
+            else:
+                plist = projects.get("projects") or []
+                if isinstance(plist, list) and plist:
+                    tiers = []
+                    gaps_n = 0
+                    typed = [p for p in plist if isinstance(p, dict)]
+                    for item in typed:
+                        name = str(item.get("name") or "项目")
+                        vt = str(item.get("value_tier") or "mid")
+                        dt = str(item.get("difficulty_tier") or "mid")
+                        tiers.append(f"{name}含金量{vt}/难度{dt}")
+                        gaps = item.get("structure_gaps") or []
+                        if isinstance(gaps, list):
+                            gaps_n += len(gaps)
+                    parts.append("；".join(tiers))
+                    if gaps_n:
+                        c3_doubt = True
+                        parts.append(f"结构缺口合计 {gaps_n} 处（辅导）")
+                    if typed and all(
+                        str(item.get("value_tier")) == "low"
+                        and str(item.get("difficulty_tier")) == "low"
+                        for item in typed
+                    ):
+                        c3_pass = False
+                        parts.append("主项目含金量与难度均为低，技术证据偏薄")
+                else:
+                    c3_doubt = True
+                    parts.append("项目审阅未识别到主项目列表")
         if skills is not None:
             market = (
                 skills.get("market_alignment")

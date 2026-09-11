@@ -447,12 +447,21 @@ def review_projects_cmd(
         typer.secho(str(exc), err=True, fg=typer.colors.RED)
         raise typer.Exit(code=1) from exc
 
-    tier_zh = {"high": "高", "mid": "中", "low": "低"}
+    if result.llm_degraded:
+        typer.secho(
+            f"项目审阅已降级：{result.llm_error or '大模型输出无法解析'}。"
+            "未给出含金量 / 难度档，不因此写成不能投。",
+            fg=typer.colors.YELLOW,
+        )
     typer.echo(f"已写出项目审阅：{result.report_md}")
     typer.echo("本步只做含金量 / 难度档，不判能不能投，不含薪资。")
     typer.echo(f"范围：{result.scope}")
     typer.echo(f"摘要：{result.summary}")
+    if result.llm_degraded:
+        typer.echo("共 0 个项目档次（LLM 降级，详见报告）。")
+        return
     typer.echo(f"共 {result.project_count} 个项目（详见报告）。")
+    tier_zh = {"high": "高", "mid": "中", "low": "低"}
     for project in result.projects[:3]:
         value = tier_zh.get(str(project.get("value_tier")), project.get("value_tier"))
         difficulty = tier_zh.get(

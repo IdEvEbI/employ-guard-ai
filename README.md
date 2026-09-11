@@ -15,7 +15,7 @@
 2. **听后做复盘**：转写现场录音 → 还原问答 → 面试评价（命令 `interview`）。
 3. **后续愿景**：知识库、模拟面试、真面试入库、企业查询（都是新工具，不作为本期必须交付）。
 
-当前里程碑是 **投前看简历 · 排查增强稳定性**：规范化文末截断或丢章节须回退（[#88](https://github.com/IdEvEbI/employ-guard-ai/issues/88)）。看图超时重试、规范化坏正文回退、R13 `word-to-pdf`、批跑超时隔离与结构化链 R17～R26 已合入；听后做复盘暂缓；R16 不插队。进度见 [开发看板](./docs/03-delivery/001_dev-board_开发看板.md)。
+当前里程碑是 **投前看简历 · 排查增强稳定性**：项目审阅 JSON 非法须降级（[#90](https://github.com/IdEvEbI/employ-guard-ai/issues/90)）。规范化截断回退、看图超时重试、R13 `word-to-pdf`、批跑超时隔离与结构化链 R17～R26 已合入；听后做复盘暂缓；R16 不插队。进度见 [开发看板](./docs/03-delivery/001_dev-board_开发看板.md)。
 
 `word-to-pdf` / `parse-resume` / `check-profile` / `check-skills` / `review-projects` 均可单独跑；完整 `resume` 仍只接受 PDF（缺 PDF 时先转）。parse 之后文本评价步优先 `resume.norm.md`。命令列表以 `uv run employ-guard --help` 与产品说明第 4 节为准。
 

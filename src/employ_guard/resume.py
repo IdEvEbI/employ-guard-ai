@@ -1181,7 +1181,10 @@ def _run_text_path(
                 bundle.hard_error = str(exc)
                 return bundle
             g1t = "近浅远深存疑" if reviewed.g1t_doubtful else "G1-T 符合期望"
-            base = f"{reviewed.project_count} 个主项目 · {g1t}"
+            if reviewed.llm_degraded:
+                base = "LLM 降级，未给出含金量 / 难度档"
+            else:
+                base = f"{reviewed.project_count} 个主项目 · {g1t}"
             if force and had_projects:
                 detail = f"强制重跑，{base}"
             elif had_projects:
