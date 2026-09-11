@@ -331,3 +331,59 @@ def test_cli_review_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert result.exit_code == 0
     assert "项目审阅" in result.stdout
     assert "含金量" in result.stdout
+
+
+def test_thinking_dump_degrades_without_fabricating_tiers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    md = tmp_path / "dump.resume.md"
+    md.write_text("项目经历\n智能客服 RAG\n负责检索与评测。\n", encoding="utf-8")
+    monkeypatch.setattr("employ_guard.review_projects.time.sleep", lambda _s: None)
+
+    def _think(**_kwargs: object) -> str:
+        return (
+            "We need output JSON only. Need analyze resume. Need fields.\n"
+            "Let's parse. Work experience overlap?\n"
+        )
+
+    monkeypatch.setattr("employ_guard.review_projects.chat_completion", _think)
+    result = review_projects(md, root=tmp_path)
+    assert result.llm_degraded is True
+    assert result.projects == []
+    data = json.loads(result.report_json.read_text(encoding="utf-8"))
+    assert data["llm_degraded"] is True
+    assert data["method"]["projects"] == "llm-degraded"
+    assert data["projects"] == []
+    report = result.report_md.read_text(encoding="utf-8")
+    assert "LLM 降级" in report
+    assert "## 项目：" not in report
+
+
+def test_truncated_json_degrades(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    md = tmp_path / "cut.resume.md"
+    md.write_text("项目经历\n智能客服 RAG\n", encoding="utf-8")
+    monkeypatch.setattr("employ_guard.review_projects.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "employ_guard.review_projects.chat_completion",
+        lambda **_kwargs: '{"projects": [{"name": "截断',
+    )
+    result = review_projects(md, root=tmp_path)
+    assert result.llm_degraded is True
+    assert result.projects == []
+
+
+def test_cli_degraded_exits_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    md = tmp_path / "cli-deg.resume.md"
+    md.write_text("项目经历\n智能客服 RAG\n", encoding="utf-8")
+    monkeypatch.setattr("employ_guard.review_projects.time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "employ_guard.review_projects.chat_completion",
+        lambda **_kwargs: "We need output JSON only.",
+    )
+    result = runner.invoke(app, ["review-projects", str(md)])
+    assert result.exit_code == 0
+    assert "降级" in result.stdout

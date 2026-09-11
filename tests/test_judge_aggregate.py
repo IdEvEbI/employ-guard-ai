@@ -205,3 +205,25 @@ def test_apply_profile_and_skills_helpers() -> None:
     c8 = next(i for i in updated if i["id"] == "C8")
     assert c8["pass"] is True
     assert c8["doubtful"] is True
+
+
+def test_degraded_projects_c3_is_doubtful_not_fail() -> None:
+    pass_line = [
+        {
+            "id": "C3",
+            "pass": True,
+            "doubtful": False,
+            "note": "原注",
+            "method": "llm",
+        }
+    ]
+    updated = apply_skills_projects_c3_c8(
+        pass_line,
+        skills=None,
+        projects={"llm_degraded": True, "projects": []},
+    )
+    c3 = next(item for item in updated if item["id"] == "C3")
+    assert c3["pass"] is True
+    assert c3["doubtful"] is True
+    assert "降级" in c3["note"]
+    assert "不能投" in c3["note"]
